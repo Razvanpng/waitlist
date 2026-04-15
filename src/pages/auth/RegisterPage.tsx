@@ -59,101 +59,103 @@ export function RegisterPage() {
   };
 
   return (
-    <div className="flex min-h-screen w-full bg-background animate-fade-in flex-row-reverse">
-      <div className="hidden lg:flex w-5/12 bg-primary text-foreground p-16 flex-col justify-end relative overflow-hidden animate-slide-left border-l-0">
+    <div className="relative min-h-[100dvh] w-full overflow-hidden bg-primary animate-fade-in">
+      <div className="absolute inset-y-0 right-0 hidden lg:flex w-full lg:w-[42%] bg-primary text-foreground p-10 xl:p-16 flex-col justify-end overflow-hidden z-0">
         <div className="absolute top-[-20%] right-[-20%] w-[140%] h-[140%] border-[4px] border-foreground rounded-full opacity-10 pointer-events-none" />
-        <div className="font-display text-[6rem] leading-[0.85] tracking-tight uppercase relative z-10">
+        <div className="font-display text-[4.5rem] xl:text-[6rem] leading-[0.85] tracking-tight uppercase relative z-10 animate-slide-left">
           Start <br/> tracking.
         </div>
       </div>
 
-      <div className="flex w-full lg:w-7/12 flex-col justify-center px-8 py-12 md:px-16 lg:px-24 xl:px-32 relative shadow-2xl">
+      <div className="relative z-10 flex min-h-[100dvh] w-full lg:w-[58%] flex-col justify-center px-6 py-12 sm:px-12 md:px-16 lg:px-20 xl:px-32 bg-background shadow-[20px_0_40px_rgba(0,0,0,0.05)]">
         <div className="w-full max-w-2xl mx-auto animate-slide-up">
-          <h2 className="font-display text-5xl uppercase mb-14 tracking-tight">Create account</h2>
+          <div className="lg:hidden font-display text-2xl tracking-tighter text-foreground mb-8">WAITLIST.</div>
+
+          <h2 className="font-display text-4xl xl:text-5xl uppercase mb-10 xl:mb-14 tracking-tight">Create account</h2>
           
-          <form onSubmit={handleSubmit(onSubmit)} noValidate className="flex flex-col gap-10">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
-              <div className="flex flex-col gap-3">
-                <label className="text-base font-bold uppercase tracking-widest text-foreground">
+          <form onSubmit={handleSubmit(onSubmit)} noValidate className="flex flex-col gap-8 xl:gap-10">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-8 xl:gap-10">
+              <div className="flex flex-col gap-2 xl:gap-3">
+                <label className="text-sm xl:text-base font-bold uppercase tracking-widest text-foreground">
                   Full Name
                 </label>
                 <input
                   {...register("full_name")}
                   type="text"
                   autoComplete="name"
-                  className={`w-full border-b-4 bg-transparent py-3 text-2xl outline-none transition-all focus:bg-foreground/5 focus:px-4 ${
+                  className={`w-full border-b-4 bg-transparent py-2 xl:py-3 text-xl xl:text-2xl outline-none transition-all focus:bg-foreground/5 focus:px-4 ${
                     errors.full_name ? "border-destructive" : "border-foreground"
                   }`}
                 />
-                {errors.full_name && <span className="text-base font-bold text-destructive">{errors.full_name.message}</span>}
+                {errors.full_name && <span className="text-sm xl:text-base font-bold text-destructive">{errors.full_name.message}</span>}
               </div>
 
-              <div className="flex flex-col gap-3">
-                <label className="text-base font-bold uppercase tracking-widest text-foreground">
+              <div className="flex flex-col gap-2 xl:gap-3">
+                <label className="text-sm xl:text-base font-bold uppercase tracking-widest text-foreground">
                   Email
                 </label>
                 <input
                   {...register("email")}
                   type="email"
                   autoComplete="email"
-                  className={`w-full border-b-4 bg-transparent py-3 text-2xl outline-none transition-all focus:bg-foreground/5 focus:px-4 ${
+                  className={`w-full border-b-4 bg-transparent py-2 xl:py-3 text-xl xl:text-2xl outline-none transition-all focus:bg-foreground/5 focus:px-4 ${
                     errors.email ? "border-destructive" : "border-foreground"
                   }`}
                 />
-                {errors.email && <span className="text-base font-bold text-destructive">{errors.email.message}</span>}
+                {errors.email && <span className="text-sm xl:text-base font-bold text-destructive">{errors.email.message}</span>}
               </div>
             </div>
 
-            <div className="flex flex-col gap-3">
-              <label className="text-base font-bold uppercase tracking-widest text-foreground">
+            <div className="flex flex-col gap-2 xl:gap-3">
+              <label className="text-sm xl:text-base font-bold uppercase tracking-widest text-foreground">
                 Account Type
               </label>
               <select
                 {...register("role")}
-                className={`w-full border-b-4 bg-transparent py-3 text-2xl outline-none transition-all cursor-pointer appearance-none rounded-none focus:bg-foreground/5 focus:px-4 ${
+                className={`w-full border-b-4 bg-transparent py-2 xl:py-3 text-xl xl:text-2xl outline-none transition-all cursor-pointer appearance-none rounded-none focus:bg-foreground/5 focus:px-4 ${
                   errors.role ? "border-destructive" : "border-foreground"
                 }`}
               >
                 <option value="client">Client User</option>
                 <option value="admin">System Administrator</option>
               </select>
-              {errors.role && <span className="text-base font-bold text-destructive">{errors.role.message}</span>}
+              {errors.role && <span className="text-sm xl:text-base font-bold text-destructive">{errors.role.message}</span>}
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-10">
-              <div className="flex flex-col gap-3">
-                <label className="text-base font-bold uppercase tracking-widest text-foreground">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-8 xl:gap-10">
+              <div className="flex flex-col gap-2 xl:gap-3">
+                <label className="text-sm xl:text-base font-bold uppercase tracking-widest text-foreground">
                   Password
                 </label>
                 <input
                   {...register("password")}
                   type="password"
                   autoComplete="new-password"
-                  className={`w-full border-b-4 bg-transparent py-3 text-2xl outline-none transition-all focus:bg-foreground/5 focus:px-4 ${
+                  className={`w-full border-b-4 bg-transparent py-2 xl:py-3 text-xl xl:text-2xl outline-none transition-all focus:bg-foreground/5 focus:px-4 ${
                     errors.password ? "border-destructive" : "border-foreground"
                   }`}
                 />
-                {errors.password && <span className="text-base font-bold text-destructive">{errors.password.message}</span>}
+                {errors.password && <span className="text-sm xl:text-base font-bold text-destructive">{errors.password.message}</span>}
               </div>
 
-              <div className="flex flex-col gap-3">
-                <label className="text-base font-bold uppercase tracking-widest text-foreground">
+              <div className="flex flex-col gap-2 xl:gap-3">
+                <label className="text-sm xl:text-base font-bold uppercase tracking-widest text-foreground">
                   Confirm
                 </label>
                 <input
                   {...register("confirm_password")}
                   type="password"
                   autoComplete="new-password"
-                  className={`w-full border-b-4 bg-transparent py-3 text-2xl outline-none transition-all focus:bg-foreground/5 focus:px-4 ${
+                  className={`w-full border-b-4 bg-transparent py-2 xl:py-3 text-xl xl:text-2xl outline-none transition-all focus:bg-foreground/5 focus:px-4 ${
                     errors.confirm_password ? "border-destructive" : "border-foreground"
                   }`}
                 />
-                {errors.confirm_password && <span className="text-base font-bold text-destructive">{errors.confirm_password.message}</span>}
+                {errors.confirm_password && <span className="text-sm xl:text-base font-bold text-destructive">{errors.confirm_password.message}</span>}
               </div>
             </div>
 
             {serverError && (
-              <div className="bg-destructive text-destructive-foreground p-5 text-base font-bold uppercase tracking-widest">
+              <div className="bg-destructive text-destructive-foreground p-4 xl:p-5 text-sm xl:text-base font-bold uppercase tracking-widest">
                 {serverError}
               </div>
             )}
@@ -161,14 +163,14 @@ export function RegisterPage() {
             <button
               type="submit"
               disabled={isSubmitting}
-              className="mt-8 flex w-full items-center justify-center bg-foreground py-6 text-xl font-bold uppercase tracking-widest text-background transition-all hover:bg-primary hover:text-foreground disabled:opacity-50"
+              className="mt-4 xl:mt-6 flex w-full items-center justify-center bg-foreground py-5 xl:py-6 text-lg xl:text-xl font-bold uppercase tracking-widest text-background transition-all hover:bg-primary hover:text-foreground disabled:opacity-50"
             >
-              {isSubmitting ? <Loader2 className="mr-3 h-6 w-6 animate-spin" /> : null}
+              {isSubmitting ? <Loader2 className="mr-3 h-5 w-5 xl:h-6 xl:w-6 animate-spin" /> : null}
               {isSubmitting ? "Creating account" : "Create account"}
             </button>
           </form>
 
-          <div className="mt-20 border-t-4 border-foreground pt-8 text-base font-bold uppercase tracking-widest">
+          <div className="mt-16 xl:mt-20 border-t-4 border-foreground pt-6 xl:pt-8 text-sm xl:text-base font-bold uppercase tracking-widest">
             Already have an account?{" "}
             <Link to="/login" className="text-foreground hover:text-primary transition-colors underline decoration-4 underline-offset-4">
               Sign in
