@@ -1,4 +1,4 @@
-@import url("https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap");
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;600;700&family=Syne:wght@600;700;800&display=swap');
 
 @tailwind base;
 @tailwind components;
@@ -6,20 +6,26 @@
 
 @layer base {
   :root {
-    --background: 0 0% 3.9%;
-    --foreground: 0 0% 98%;
-    --card: 0 0% 7%;
-    --card-foreground: 0 0% 98%;
-    --primary: 262 80% 60%;
-    --primary-foreground: 0 0% 100%;
-    --muted: 0 0% 10%;
-    --muted-foreground: 0 0% 60%;
-    --destructive: 0 72% 51%;
-    --destructive-foreground: 0 0% 98%;
-    --border: 0 0% 14%;
-    --input: 0 0% 14%;
-    --ring: 262 80% 60%;
-    --radius: 0.5rem;
+    --background: 36 33% 94%;
+    --foreground: 88 22% 17%;
+    
+    --card: 36 33% 94%;
+    --card-foreground: 88 22% 17%;
+    
+    --primary: 73 100% 60%;
+    --primary-foreground: 88 22% 17%;
+    
+    --muted: 36 20% 85%;
+    --muted-foreground: 88 10% 40%;
+    
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 100%;
+    
+    --border: 88 22% 17%;
+    --input: 88 22% 17%;
+    --ring: 73 100% 60%;
+    
+    --radius: 0px;
   }
 
   * {
@@ -27,6 +33,11 @@
   }
 
   body {
-    @apply bg-background text-foreground font-sans antialiased;
+    @apply bg-background text-foreground antialiased;
+    font-family: 'Space Grotesk', sans-serif;
+  }
+
+  h1, h2, h3, h4, h5, h6, .font-display {
+    font-family: 'Syne', sans-serif;
   }
 }

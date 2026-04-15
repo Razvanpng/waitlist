@@ -3,20 +3,20 @@ import { Link, useNavigate } from "react-router-dom";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { Loader2, Mail, Lock, User, Zap, ChevronDown } from "lucide-react";
+import { Loader2 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import type { UserRole } from "@/store/authSlice";
 
 const schema = z
   .object({
-    full_name: z.string().min(2, "enter your full name"),
-    email: z.string().email("enter a valid email"),
+    full_name: z.string().min(2, "name required"),
+    email: z.string().email("invalid email"),
     role: z.enum(["client", "admin"]),
-    password: z.string().min(8, "minimum 8 characters"),
+    password: z.string().min(8, "min 8 chars"),
     confirm_password: z.string(),
   })
   .refine((d) => d.password === d.confirm_password, {
-    message: "passwords do not match",
+    message: "passwords mismatch",
     path: ["confirm_password"],
   });
 
@@ -50,179 +50,132 @@ export function RegisterPage() {
     });
 
     if (error) {
-      setServerError(error.message.toLowerCase());
+      setServerError(error.message);
       return;
     }
 
-    // role is in user_metadata — onAuthStateChange in App.tsx will handle redirect
-    const dest =
-      values.role === "admin" ? "/admin/dashboard" : "/client/dashboard";
+    const dest = values.role === "admin" ? "/admin/dashboard" : "/client/dashboard";
     navigate(dest, { replace: true });
   };
 
   return (
-    <div className="min-h-screen bg-zinc-950 flex items-center justify-center px-4 py-12">
-      <div
-        className="absolute inset-0 pointer-events-none"
-        style={{
-          backgroundImage:
-            "radial-gradient(circle at 1px 1px, rgba(255,255,255,0.04) 1px, transparent 0)",
-          backgroundSize: "28px 28px",
-        }}
-      />
-
-      <div className="relative w-full max-w-sm">
-        <div className="mb-8 flex flex-col items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-violet-600">
-            <Zap className="h-5 w-5 text-white" strokeWidth={2.5} />
-          </div>
-          <div className="text-center">
-            <h1 className="text-xl font-semibold text-zinc-100 tracking-tight">
-              Create an account
-            </h1>
-            <p className="mt-1 text-sm text-zinc-500">
-              Start managing your waitlist
-            </p>
-          </div>
+    <div className="flex min-h-screen bg-background flex-row-reverse">
+      <div className="hidden lg:flex lg:w-2/5 bg-primary text-foreground p-12 flex-col justify-end relative overflow-hidden">
+        <div className="absolute top-[-20%] right-[-20%] w-[140%] h-[140%] border-[2px] border-foreground rounded-full opacity-10 pointer-events-none" />
+        <div className="font-display text-5xl leading-[0.9] tracking-tight uppercase relative z-10">
+          Optimization <br/> Protocol
         </div>
+      </div>
 
-        <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-6 shadow-xl shadow-black/30">
-          <form onSubmit={handleSubmit(onSubmit)} noValidate className="flex flex-col gap-4">
-            <Field label="Full name" error={errors.full_name?.message}>
-              <div className="relative">
-                <User className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-500" />
+      <div className="flex w-full lg:w-3/5 flex-col justify-center px-6 py-12 md:px-16 lg:px-32">
+        <div className="w-full max-w-xl">
+          <h2 className="font-display text-4xl uppercase mb-12 tracking-tight">Register</h2>
+          
+          <form onSubmit={handleSubmit(onSubmit)} noValidate className="flex flex-col gap-8">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+              <div className="flex flex-col gap-2">
+                <label className="text-sm font-bold uppercase tracking-widest text-foreground">
+                  Full Name
+                </label>
                 <input
                   {...register("full_name")}
                   type="text"
                   autoComplete="name"
-                  placeholder="Jane Smith"
-                  className={inputCls(!!errors.full_name, "pl-9")}
+                  className={`w-full border-b-2 bg-transparent py-2 text-xl outline-none transition-all focus:bg-foreground/5 focus:px-3 ${
+                    errors.full_name ? "border-destructive" : "border-foreground"
+                  }`}
                 />
+                {errors.full_name && <span className="text-sm font-bold text-destructive">{errors.full_name.message}</span>}
               </div>
-            </Field>
 
-            <Field label="Email" error={errors.email?.message}>
-              <div className="relative">
-                <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-500" />
+              <div className="flex flex-col gap-2">
+                <label className="text-sm font-bold uppercase tracking-widest text-foreground">
+                  Email
+                </label>
                 <input
                   {...register("email")}
                   type="email"
                   autoComplete="email"
-                  placeholder="you@company.com"
-                  className={inputCls(!!errors.email, "pl-9")}
+                  className={`w-full border-b-2 bg-transparent py-2 text-xl outline-none transition-all focus:bg-foreground/5 focus:px-3 ${
+                    errors.email ? "border-destructive" : "border-foreground"
+                  }`}
                 />
+                {errors.email && <span className="text-sm font-bold text-destructive">{errors.email.message}</span>}
               </div>
-            </Field>
+            </div>
 
-            <Field label="Account type" error={errors.role?.message}>
-              <div className="relative">
-                <select
-                  {...register("role")}
-                  className={`
-                    ${inputCls(!!errors.role, "pr-8")}
-                    appearance-none bg-zinc-800/60 cursor-pointer
-                  `}
-                >
-                  <option value="client">Client — book slots</option>
-                  <option value="admin">Business Admin — manage slots</option>
-                </select>
-                <ChevronDown className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-500" />
-              </div>
-            </Field>
+            <div className="flex flex-col gap-2">
+              <label className="text-sm font-bold uppercase tracking-widest text-foreground">
+                Access Level
+              </label>
+              <select
+                {...register("role")}
+                className={`w-full border-b-2 bg-transparent py-2 text-xl outline-none transition-all cursor-pointer appearance-none rounded-none focus:bg-foreground/5 focus:px-3 ${
+                  errors.role ? "border-destructive" : "border-foreground"
+                }`}
+              >
+                <option value="client">Client User</option>
+                <option value="admin">System Administrator</option>
+              </select>
+              {errors.role && <span className="text-sm font-bold text-destructive">{errors.role.message}</span>}
+            </div>
 
-            <Field label="Password" error={errors.password?.message}>
-              <div className="relative">
-                <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-500" />
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+              <div className="flex flex-col gap-2">
+                <label className="text-sm font-bold uppercase tracking-widest text-foreground">
+                  Password
+                </label>
                 <input
                   {...register("password")}
                   type="password"
                   autoComplete="new-password"
-                  placeholder="min. 8 characters"
-                  className={inputCls(!!errors.password, "pl-9")}
+                  className={`w-full border-b-2 bg-transparent py-2 text-xl outline-none transition-all focus:bg-foreground/5 focus:px-3 ${
+                    errors.password ? "border-destructive" : "border-foreground"
+                  }`}
                 />
+                {errors.password && <span className="text-sm font-bold text-destructive">{errors.password.message}</span>}
               </div>
-            </Field>
 
-            <Field label="Confirm password" error={errors.confirm_password?.message}>
-              <div className="relative">
-                <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-500" />
+              <div className="flex flex-col gap-2">
+                <label className="text-sm font-bold uppercase tracking-widest text-foreground">
+                  Confirm
+                </label>
                 <input
                   {...register("confirm_password")}
                   type="password"
                   autoComplete="new-password"
-                  placeholder="repeat password"
-                  className={inputCls(!!errors.confirm_password, "pl-9")}
+                  className={`w-full border-b-2 bg-transparent py-2 text-xl outline-none transition-all focus:bg-foreground/5 focus:px-3 ${
+                    errors.confirm_password ? "border-destructive" : "border-foreground"
+                  }`}
                 />
+                {errors.confirm_password && <span className="text-sm font-bold text-destructive">{errors.confirm_password.message}</span>}
               </div>
-            </Field>
+            </div>
 
             {serverError && (
-              <div className="rounded-lg border border-red-500/20 bg-red-500/10 px-3 py-2.5">
-                <p className="text-xs text-red-400">{serverError}</p>
+              <div className="bg-destructive text-destructive-foreground p-4 text-sm font-bold uppercase tracking-widest">
+                {serverError}
               </div>
             )}
 
             <button
               type="submit"
               disabled={isSubmitting}
-              className="
-                mt-1 flex items-center justify-center gap-2 rounded-lg
-                bg-violet-600 hover:bg-violet-500 active:bg-violet-700
-                px-4 py-2.5 text-sm font-medium text-white
-                transition-colors disabled:cursor-not-allowed disabled:opacity-50
-              "
+              className="mt-6 flex w-full items-center justify-center bg-foreground py-5 text-sm font-bold uppercase tracking-widest text-background transition-all hover:bg-primary hover:text-foreground disabled:opacity-50"
             >
-              {isSubmitting && <Loader2 className="h-4 w-4 animate-spin" />}
-              {isSubmitting ? "Creating account…" : "Create account"}
+              {isSubmitting ? <Loader2 className="mr-2 h-5 w-5 animate-spin" /> : null}
+              {isSubmitting ? "Processing" : "Submit"}
             </button>
           </form>
+
+          <div className="mt-16 border-t-2 border-foreground pt-6 text-sm font-bold uppercase tracking-widest">
+            Existing protocol?{" "}
+            <Link to="/login" className="text-foreground hover:text-primary transition-colors underline decoration-2 underline-offset-4">
+              Return to Login
+            </Link>
+          </div>
         </div>
-
-        <p className="mt-5 text-center text-sm text-zinc-600">
-          Already have an account?{" "}
-          <Link
-            to="/login"
-            className="text-zinc-400 hover:text-zinc-200 transition-colors underline underline-offset-4"
-          >
-            Sign in
-          </Link>
-        </p>
       </div>
-    </div>
-  );
-}
-
-// -- helpers --
-
-function inputCls(hasError: boolean, extra = "") {
-  return [
-    "w-full rounded-lg border bg-zinc-800/60 px-3 py-2.5",
-    "text-sm text-zinc-100 placeholder:text-zinc-600",
-    "outline-none transition-colors",
-    "focus:ring-1 focus:ring-violet-500 focus:border-violet-500",
-    hasError
-      ? "border-red-500/70"
-      : "border-zinc-700 hover:border-zinc-600",
-    extra,
-  ]
-    .filter(Boolean)
-    .join(" ");
-}
-
-interface FieldProps {
-  label: string;
-  error?: string;
-  children: React.ReactNode;
-}
-
-function Field({ label, error, children }: FieldProps) {
-  return (
-    <div className="flex flex-col gap-1.5">
-      <label className="text-xs font-medium text-zinc-400 uppercase tracking-widest">
-        {label}
-      </label>
-      {children}
-      {error && <p className="text-xs text-red-400">{error}</p>}
     </div>
   );
 }

@@ -3,12 +3,12 @@ import { Link, useNavigate, useLocation } from "react-router-dom";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
-import { Loader2, Mail, Lock, Zap } from "lucide-react";
+import { Loader2 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 
 const schema = z.object({
-  email: z.string().email("enter a valid email"),
-  password: z.string().min(1, "password is required"),
+  email: z.string().email("invalid email format"),
+  password: z.string().min(1, "password required"),
 });
 
 type FormValues = z.infer<typeof schema>;
@@ -34,7 +34,7 @@ export function LoginPage() {
     });
 
     if (error) {
-      setServerError(error.message.toLowerCase());
+      setServerError(error.message);
       return;
     }
 
@@ -44,120 +44,80 @@ export function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen bg-zinc-950 flex items-center justify-center px-4">
-      <div
-        className="absolute inset-0 pointer-events-none"
-        style={{
-          backgroundImage:
-            "radial-gradient(circle at 1px 1px, rgba(255,255,255,0.04) 1px, transparent 0)",
-          backgroundSize: "28px 28px",
-        }}
-      />
-
-      <div className="relative w-full max-w-sm">
-        <div className="mb-8 flex flex-col items-center gap-3">
-          <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-violet-600">
-            <Zap className="h-5 w-5 text-white" strokeWidth={2.5} />
-          </div>
-          <div className="text-center">
-            <h1 className="text-xl font-semibold text-zinc-100 tracking-tight">
-              Welcome back
-            </h1>
-            <p className="mt-1 text-sm text-zinc-500">
-              Sign in to your account
-            </p>
-          </div>
+    <div className="flex min-h-screen bg-background">
+      <div className="hidden lg:flex lg:w-1/2 bg-foreground text-primary p-12 flex-col justify-between">
+        <div className="font-display text-2xl tracking-tighter">WAITLIST.</div>
+        <div className="max-w-xl">
+          <h1 className="font-display text-7xl leading-[0.9] tracking-tight uppercase">
+            Time is <br /> finite.
+          </h1>
+          <p className="mt-8 text-xl text-background/80">
+            Stop losing revenue to cancellations. We catch the empty slots before you even notice them.
+          </p>
         </div>
+        <div className="text-sm font-bold tracking-widest uppercase">
+          System v2.0
+        </div>
+      </div>
 
-        <div className="rounded-2xl border border-zinc-800 bg-zinc-900 p-6 shadow-xl shadow-black/30">
-          <form onSubmit={handleSubmit(onSubmit)} noValidate className="flex flex-col gap-4">
-            <div className="flex flex-col gap-1.5">
-              <label className="text-xs font-medium text-zinc-400 uppercase tracking-widest">
-                Email
+      <div className="flex w-full lg:w-1/2 flex-col justify-center px-6 py-12 md:px-16 lg:px-24">
+        <div className="w-full max-w-md mx-auto">
+          <h2 className="font-display text-4xl uppercase mb-10 tracking-tight">Sign In</h2>
+          
+          <form onSubmit={handleSubmit(onSubmit)} noValidate className="flex flex-col gap-8">
+            <div className="flex flex-col gap-2">
+              <label className="text-sm font-bold uppercase tracking-widest text-foreground">
+                Email Address
               </label>
-              <div className="relative">
-                <Mail className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-500" />
-                <input
-                  {...register("email")}
-                  type="email"
-                  autoComplete="email"
-                  placeholder="you@company.com"
-                  className={`
-                    w-full rounded-lg border bg-zinc-800/60 pl-9 pr-3 py-2.5
-                    text-sm text-zinc-100 placeholder:text-zinc-600
-                    outline-none transition-colors
-                    focus:ring-1 focus:ring-violet-500 focus:border-violet-500
-                    ${errors.email
-                      ? "border-red-500/70"
-                      : "border-zinc-700 hover:border-zinc-600"
-                    }
-                  `}
-                />
-              </div>
-              {errors.email && (
-                <p className="text-xs text-red-400">{errors.email.message}</p>
-              )}
+              <input
+                {...register("email")}
+                type="email"
+                autoComplete="email"
+                className={`w-full border-b-2 bg-transparent py-2 text-xl outline-none transition-all focus:bg-foreground/5 focus:px-3 ${
+                  errors.email ? "border-destructive" : "border-foreground"
+                }`}
+              />
+              {errors.email && <span className="text-sm font-bold text-destructive">{errors.email.message}</span>}
             </div>
 
-            <div className="flex flex-col gap-1.5">
-              <label className="text-xs font-medium text-zinc-400 uppercase tracking-widest">
+            <div className="flex flex-col gap-2">
+              <label className="text-sm font-bold uppercase tracking-widest text-foreground">
                 Password
               </label>
-              <div className="relative">
-                <Lock className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-zinc-500" />
-                <input
-                  {...register("password")}
-                  type="password"
-                  autoComplete="current-password"
-                  placeholder="••••••••"
-                  className={`
-                    w-full rounded-lg border bg-zinc-800/60 pl-9 pr-3 py-2.5
-                    text-sm text-zinc-100 placeholder:text-zinc-600
-                    outline-none transition-colors
-                    focus:ring-1 focus:ring-violet-500 focus:border-violet-500
-                    ${errors.password
-                      ? "border-red-500/70"
-                      : "border-zinc-700 hover:border-zinc-600"
-                    }
-                  `}
-                />
-              </div>
-              {errors.password && (
-                <p className="text-xs text-red-400">{errors.password.message}</p>
-              )}
+              <input
+                {...register("password")}
+                type="password"
+                autoComplete="current-password"
+                className={`w-full border-b-2 bg-transparent py-2 text-xl outline-none transition-all focus:bg-foreground/5 focus:px-3 ${
+                  errors.password ? "border-destructive" : "border-foreground"
+                }`}
+              />
+              {errors.password && <span className="text-sm font-bold text-destructive">{errors.password.message}</span>}
             </div>
 
             {serverError && (
-              <div className="rounded-lg border border-red-500/20 bg-red-500/10 px-3 py-2.5">
-                <p className="text-xs text-red-400">{serverError}</p>
+              <div className="bg-destructive text-destructive-foreground p-4 text-sm font-bold uppercase tracking-widest">
+                {serverError}
               </div>
             )}
 
             <button
               type="submit"
               disabled={isSubmitting}
-              className="
-                mt-1 flex items-center justify-center gap-2 rounded-lg
-                bg-violet-600 hover:bg-violet-500 active:bg-violet-700
-                px-4 py-2.5 text-sm font-medium text-white
-                transition-colors disabled:cursor-not-allowed disabled:opacity-50
-              "
+              className="mt-4 flex w-full items-center justify-center bg-foreground py-5 text-sm font-bold uppercase tracking-widest text-background transition-all hover:bg-primary hover:text-foreground disabled:opacity-50"
             >
-              {isSubmitting && <Loader2 className="h-4 w-4 animate-spin" />}
-              {isSubmitting ? "Signing in…" : "Sign in"}
+              {isSubmitting ? <Loader2 className="mr-2 h-5 w-5 animate-spin" /> : null}
+              {isSubmitting ? "Authenticating" : "Enter System"}
             </button>
           </form>
-        </div>
 
-        <p className="mt-5 text-center text-sm text-zinc-600">
-          Don&apos;t have an account?{" "}
-          <Link
-            to="/register"
-            className="text-zinc-400 hover:text-zinc-200 transition-colors underline underline-offset-4"
-          >
-            Create one
-          </Link>
-        </p>
+          <div className="mt-16 border-t-2 border-foreground pt-6 text-sm font-bold uppercase tracking-widest">
+            New user?{" "}
+            <Link to="/register" className="text-foreground hover:text-primary transition-colors underline decoration-2 underline-offset-4">
+              Initialize account
+            </Link>
+          </div>
+        </div>
       </div>
     </div>
   );
