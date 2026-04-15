@@ -60,9 +60,10 @@ export function RegisterPage() {
 
   return (
     <div className="relative min-h-[100dvh] w-full overflow-hidden bg-primary animate-fade-in">
-      <div className="absolute inset-y-0 right-0 hidden lg:flex w-full lg:w-[42%] bg-primary text-foreground p-10 xl:p-16 flex-col justify-end overflow-hidden z-0">
+      
+      <div className="hidden lg:flex absolute inset-y-0 right-0 w-[42%] flex-col justify-end p-10 xl:p-16 text-foreground animate-slide-left z-0">
         <div className="absolute top-[-20%] right-[-20%] w-[140%] h-[140%] border-[4px] border-foreground rounded-full opacity-10 pointer-events-none" />
-        <div className="font-display text-[4.5rem] xl:text-[6rem] leading-[0.85] tracking-tight uppercase relative z-10 animate-slide-left">
+        <div className="font-display text-[4.5rem] xl:text-[6rem] leading-[0.85] tracking-tight uppercase relative z-10">
           Start <br/> tracking.
         </div>
       </div>
