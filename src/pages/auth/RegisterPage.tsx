@@ -59,16 +59,9 @@ export function RegisterPage() {
   };
 
   return (
-    <div className="relative min-h-[100dvh] w-full overflow-hidden bg-primary animate-fade-in">
+    <div className="flex min-h-[100dvh] w-full flex-col lg:flex-row animate-fade-in bg-background lg:bg-gradient-to-r lg:from-background lg:from-[58%] lg:to-primary lg:to-[58%] overflow-hidden">
       
-      <div className="hidden lg:flex absolute inset-y-0 right-0 w-[42%] flex-col justify-end p-10 xl:p-16 text-foreground animate-slide-left z-0">
-        <div className="absolute top-[-20%] right-[-20%] w-[140%] h-[140%] border-[4px] border-foreground rounded-full opacity-10 pointer-events-none" />
-        <div className="font-display text-[4.5rem] xl:text-[6rem] leading-[0.85] tracking-tight uppercase relative z-10">
-          Start <br/> tracking.
-        </div>
-      </div>
-
-      <div className="relative z-10 flex min-h-[100dvh] w-full lg:w-[58%] flex-col justify-center px-6 py-12 sm:px-12 md:px-16 lg:px-20 xl:px-32 bg-background shadow-[20px_0_40px_rgba(0,0,0,0.05)]">
+      <div className="flex w-full lg:w-[58%] flex-col justify-center px-6 py-12 sm:px-12 md:px-16 lg:px-20 xl:px-32 bg-transparent relative z-20 lg:shadow-[20px_0_40px_rgba(0,0,0,0.05)]">
         <div className="w-full max-w-2xl mx-auto animate-slide-up">
           <div className="lg:hidden font-display text-2xl tracking-tighter text-foreground mb-8">WAITLIST.</div>
 
@@ -179,6 +172,14 @@ export function RegisterPage() {
           </div>
         </div>
       </div>
+
+      <div className="hidden lg:flex w-[42%] flex-col justify-end p-10 xl:p-16 text-foreground relative overflow-hidden animate-slide-left z-10 bg-transparent pointer-events-none">
+        <div className="absolute top-[-20%] right-[-20%] w-[140%] h-[140%] border-[4px] border-foreground rounded-full opacity-10" />
+        <div className="font-display text-[4.5rem] xl:text-[6rem] leading-[0.85] tracking-tight uppercase relative z-10">
+          Start <br/> tracking.
+        </div>
+      </div>
+
     </div>
   );
 }
