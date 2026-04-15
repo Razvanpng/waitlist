@@ -12,7 +12,7 @@
     --card: 36 33% 94%;
     --card-foreground: 88 22% 17%;
     
-    --primary: 75 85% 60%;
+    --primary: 70 60% 55%;
     --primary-foreground: 88 22% 17%;
     
     --muted: 36 20% 85%;
@@ -23,7 +23,7 @@
     
     --border: 88 22% 17%;
     --input: 88 22% 17%;
-    --ring: 75 85% 60%;
+    --ring: 70 60% 55%;
     
     --radius: 0px;
   }
