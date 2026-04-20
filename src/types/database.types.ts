@@ -178,6 +178,15 @@ export interface Database {
           error: string
         }[]
       }
+      cancel_booking: {
+        Args: {
+          p_slot_id: string
+          p_client_id: string
+        }
+        Returns: {
+          success: boolean
+        }
+      }
     }
     Enums: {
       [_ in never]: never
