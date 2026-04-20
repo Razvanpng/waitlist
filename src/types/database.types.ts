@@ -1,6 +1,3 @@
-// auto-generated via `npm run db:types` — do not edit manually
-// this stub satisfies the generic until you run the generator against your project
-
 export type Json = string | number | boolean | null | { [key: string]: Json } | Json[];
 
 export interface Database {
@@ -48,31 +45,6 @@ export interface Database {
         };
         Insert: Omit<Database["public"]["Tables"]["slots"]["Row"], "id" | "created_at" | "updated_at">;
         Update: Partial<Database["public"]["Tables"]["slots"]["Insert"]>;
-      };
-      waitlist_entries: {
-        Row: {
-          id: string;
-          slot_id: string;
-          client_id: string;
-          position: number;
-          status: "waiting" | "offered" | "confirmed" | "expired" | "withdrawn";
-          offered_at: string | null;
-          offer_expires_at: string | null;
-          created_at: string;
-          updated_at: string;
-        };
-        Insert: Omit<Database["public"]["Tables"]["waitlist_entries"]["Row"], "id" | "created_at" | "updated_at">;
-        Update: Partial<Database["public"]["Tables"]["waitlist_entries"]["Insert"]>;
-      };
-    };
-    Functions: {
-      book_slot: {
-        Args: { p_slot_id: string; p_client_id: string };
-        Returns: Json;
-      };
-      join_waitlist: {
-        Args: { p_slot_id: string; p_client_id: string };
-        Returns: Json;
       };
     };
   };
