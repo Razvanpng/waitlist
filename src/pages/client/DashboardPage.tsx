@@ -60,13 +60,8 @@ export function ClientDashboardPage() {
   const [actionError, setActionError] = useState<string | null>(null);
 
   const bookedSlotIds = new Set(bookings.map((b) => b.slot_id));
-  const waitlistedSlotIds = new Set(
-    waitlistEntries
-      .filter((w) => !["confirmed", "expired", "withdrawn"].includes(w.status))
-      .map((w) => w.slot_id)
-  );
+  const waitlistedSlotIds = new Set(waitlistEntries.map((w) => w.slot_id));
 
-  // load businesses on mount
   useEffect(() => {
     (async () => {
       setLoadingBiz(true);
@@ -84,7 +79,6 @@ export function ClientDashboardPage() {
     })();
   }, []);
 
-  // load client's bookings + waitlist entries
   const loadClientState = useCallback(async () => {
     if (!profile?.id) return;
     const [{ data: bData }, { data: wData }] = await Promise.all([
@@ -93,13 +87,12 @@ export function ClientDashboardPage() {
         .from("waitlist_entries")
         .select("*")
         .eq("client_id", profile.id)
-        .not("status", "in", '("confirmed","expired","withdrawn")'),
+        .in("status", ["waiting"]),
     ]);
     if (bData) setBookings(bData);
     if (wData) setWaitlistEntries(wData);
   }, [profile?.id]);
 
-  // load slots for selected business
   const loadSlots = useCallback(async (bizId: string) => {
     setLoadingSlots(true);
     setActionError(null);
@@ -107,8 +100,9 @@ export function ClientDashboardPage() {
       .from("slots")
       .select("*")
       .eq("business_id", bizId)
-      .neq("status", "cancelled")
+      .in("status", ["available", "booked"])
       .order("starts_at", { ascending: true });
+      
     if (error) {
       setPageError(error.message);
     } else {
@@ -133,27 +127,32 @@ export function ClientDashboardPage() {
     ]);
   };
 
-  // -- actions --
-
   const handleBook = async (slotId: string) => {
     if (!profile?.id) return;
     setActionLoading(slotId);
     setActionError(null);
 
-    const { data, error } = await supabase.rpc("book_slot", {
-      p_slot_id: slotId,
-      p_client_id: profile.id,
-    });
+    const { error: bookingError } = await supabase
+      .from("bookings")
+      .insert({ slot_id: slotId, client_id: profile.id });
 
-    if (error || (data as { success: boolean })?.success === false) {
-      const msg =
-        error?.message ??
-        (data as { error?: string })?.error ??
-        "booking failed";
-      setActionError(msg);
-    } else {
-      await refresh();
+    if (bookingError) {
+      setActionError(bookingError.message);
+      setActionLoading(null);
+      return;
     }
+
+    const slot = slots.find((s) => s.id === slotId);
+    if (slot) {
+      const newCount = slot.booked_count + 1;
+      const newStatus = newCount >= slot.capacity ? "booked" : "available";
+      await supabase
+        .from("slots")
+        .update({ booked_count: newCount, status: newStatus })
+        .eq("id", slotId);
+    }
+
+    await refresh();
     setActionLoading(null);
   };
 
@@ -162,17 +161,26 @@ export function ClientDashboardPage() {
     setActionLoading(slotId);
     setActionError(null);
 
-    const { data, error } = await supabase.rpc("join_waitlist", {
-      p_slot_id: slotId,
-      p_client_id: profile.id,
-    });
+    const { data: wlData } = await supabase
+      .from("waitlist_entries")
+      .select("position")
+      .eq("slot_id", slotId)
+      .order("position", { ascending: false })
+      .limit(1);
 
-    if (error || (data as { success: boolean })?.success === false) {
-      const msg =
-        error?.message ??
-        (data as { error?: string })?.error ??
-        "could not join waitlist";
-      setActionError(msg);
+    const nextPos = wlData && wlData.length > 0 ? wlData[0].position + 1 : 1;
+
+    const { error } = await supabase
+      .from("waitlist_entries")
+      .insert({
+        slot_id: slotId,
+        client_id: profile.id,
+        position: nextPos,
+        status: "waiting",
+      });
+
+    if (error) {
+      setActionError(error.message);
     } else {
       await refresh();
     }
@@ -193,7 +201,6 @@ export function ClientDashboardPage() {
     if (error) {
       setActionError(error.message);
     } else {
-      // decrement booked_count + restore status
       const slot = slots.find((s) => s.id === slotId);
       if (slot) {
         const newCount = Math.max(0, slot.booked_count - 1);
@@ -231,7 +238,6 @@ export function ClientDashboardPage() {
 
   return (
     <div className="min-h-screen bg-background text-foreground font-sans">
-      {/* header */}
       <header className="border-b-4 border-foreground px-6 py-5 flex items-center justify-between">
         <div className="flex flex-col gap-0.5">
           <span className="text-[10px] font-bold tracking-[0.3em] text-foreground/40 uppercase">
@@ -259,7 +265,6 @@ export function ClientDashboardPage() {
       </header>
 
       <main className="mx-auto max-w-4xl px-6 py-10 flex flex-col gap-10">
-        {/* stat strip */}
         <div className="grid grid-cols-3 border-2 border-foreground divide-x-2 divide-foreground">
           <StatCell
             label="My Bookings"
@@ -278,7 +283,6 @@ export function ClientDashboardPage() {
           />
         </div>
 
-        {/* business selector */}
         <section className="flex flex-col gap-3">
           <label
             className="text-[10px] font-bold uppercase tracking-[0.25em] text-foreground/50"
@@ -318,11 +322,9 @@ export function ClientDashboardPage() {
           )}
         </section>
 
-        {/* errors */}
         {pageError && <ErrorBlock message={pageError} />}
         {actionError && <ErrorBlock message={actionError} />}
 
-        {/* slot list */}
         {selectedBiz && (
           <section className="flex flex-col gap-4">
             <div className="flex items-baseline justify-between">
@@ -387,8 +389,6 @@ export function ClientDashboardPage() {
     </div>
   );
 }
-
-// -- sub-components --
 
 function StatCell({
   label,
@@ -470,7 +470,6 @@ function SlotCard({
       className={`border-2 border-foreground bg-background ${ACTION_BORDER[action]}`}
     >
       <div className="px-5 py-4 flex flex-col sm:flex-row sm:items-center gap-4">
-        {/* info block */}
         <div className="flex-1 flex flex-col gap-2 min-w-0">
           <div className="flex flex-wrap items-center gap-2">
             <span
@@ -497,7 +496,6 @@ function SlotCard({
             </span>
           </div>
 
-          {/* fill bar */}
           <div className="h-1 w-full bg-foreground/10">
             <div
               className={`h-full transition-all ${
@@ -508,7 +506,6 @@ function SlotCard({
           </div>
         </div>
 
-        {/* action button */}
         <div className="shrink-0">
           <ActionButton
             action={action}
@@ -638,7 +635,6 @@ function ActionButton({
     );
   }
 
-  // join_waitlist
   return (
     <button
       onClick={onJoinWaitlist}
