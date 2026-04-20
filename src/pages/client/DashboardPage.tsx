@@ -172,27 +172,17 @@ export function ClientDashboardPage() {
     setActionLoading(slotId);
     setActionError(null);
 
-    const { error: bookingError } = await supabase
-      .from("bookings")
-      .insert({ slot_id: slotId, client_id: profile.id });
+    const { data, error } = await supabase.rpc("book_slot", {
+      p_slot_id: slotId,
+      p_client_id: profile.id,
+    });
 
-    if (bookingError) {
-      setActionError(bookingError.message);
-      setActionLoading(null);
-      return;
+    const res = data as any;
+    if (error || res?.success === false) {
+      setActionError(error?.message || res?.error || "booking failed");
+    } else {
+      await refresh();
     }
-
-    const slot = slots.find((s) => s.id === slotId);
-    if (slot) {
-      const newCount = slot.booked_count + 1;
-      const newStatus = newCount >= slot.capacity ? "booked" : "available";
-      await supabase
-        .from("slots")
-        .update({ booked_count: newCount, status: newStatus })
-        .eq("id", slotId);
-    }
-
-    await refresh();
     setActionLoading(null);
   };
 
@@ -201,26 +191,14 @@ export function ClientDashboardPage() {
     setActionLoading(slotId);
     setActionError(null);
 
-    const { data: wlData } = await supabase
-      .from("waitlist_entries")
-      .select("position")
-      .eq("slot_id", slotId)
-      .order("position", { ascending: false })
-      .limit(1);
+    const { data, error } = await supabase.rpc("join_waitlist", {
+      p_slot_id: slotId,
+      p_client_id: profile.id,
+    });
 
-    const nextPos = wlData && wlData.length > 0 ? wlData[0].position + 1 : 1;
-
-    const { error } = await supabase
-      .from("waitlist_entries")
-      .insert({
-        slot_id: slotId,
-        client_id: profile.id,
-        position: nextPos,
-        status: "waiting",
-      });
-
-    if (error) {
-      setActionError(error.message);
+    const res = data as any;
+    if (error || res?.success === false) {
+      setActionError(error?.message || res?.error || "waitlist failed");
     } else {
       await refresh();
     }
@@ -232,23 +210,14 @@ export function ClientDashboardPage() {
     setActionLoading(slotId);
     setActionError(null);
 
-    const { error } = await supabase
-      .from("bookings")
-      .delete()
-      .eq("slot_id", slotId)
-      .eq("client_id", profile.id);
+    const { error } = await supabase.rpc("cancel_booking", {
+      p_slot_id: slotId,
+      p_client_id: profile.id,
+    });
 
     if (error) {
       setActionError(error.message);
     } else {
-      const slot = slots.find((s) => s.id === slotId);
-      if (slot) {
-        const newCount = Math.max(0, slot.booked_count - 1);
-        await supabase
-          .from("slots")
-          .update({ booked_count: newCount, status: "available" })
-          .eq("id", slotId);
-      }
       await refresh();
     }
     setActionLoading(null);
