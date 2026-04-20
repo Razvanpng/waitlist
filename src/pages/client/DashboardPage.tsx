@@ -1,19 +1,9 @@
 import { useEffect, useState, useCallback, useRef } from "react";
+import { toast, Toaster } from "sonner";
 import {
-  Loader2,
-  LogOut,
-  CheckCircle2,
-  Clock4,
-  CalendarPlus,
-  ListPlus,
-  XCircle,
-  UserMinus,
-  AlertTriangle,
-  Building2,
-  ChevronDown,
-  Calendar,
-  Users,
-  Hourglass,
+  Loader2, LogOut, CheckCircle2, Clock4, CalendarPlus,
+  ListPlus, XCircle, UserMinus, AlertTriangle,
+  Building2, ChevronDown, Calendar, Users, Hourglass,
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { useAuthStore } from "@/store/authSlice";
@@ -24,12 +14,14 @@ type Business      = Database["public"]["Tables"]["businesses"]["Row"];
 type Booking       = Database["public"]["Tables"]["bookings"]["Row"];
 type WaitlistEntry = Database["public"]["Tables"]["waitlist_entries"]["Row"];
 
-type SlotAction =
-  | "booked"
-  | "waitlisted"
-  | "book"
-  | "join_waitlist"
-  | "cancelled_slot";
+type SlotAction = "booked" | "waitlisted" | "book" | "join_waitlist" | "cancelled_slot";
+
+type ConfirmKind = "cancel_booking" | "leave_waitlist";
+interface ConfirmState {
+  slotId: string;
+  title: string;
+  kind: ConfirmKind;
+}
 
 function resolveAction(
   slot: Slot,
@@ -46,18 +38,17 @@ function resolveAction(
 export function ClientDashboardPage() {
   const { profile, signOut } = useAuthStore();
 
-  const [businesses, setBusinesses]       = useState<Business[]>([]);
-  const [selectedBiz, setSelectedBiz]     = useState<string>("");
-  const [slots, setSlots]                 = useState<Slot[]>([]);
-  const [bookings, setBookings]           = useState<Booking[]>([]);
+  const [businesses, setBusinesses]           = useState<Business[]>([]);
+  const [selectedBiz, setSelectedBiz]         = useState<string>("");
+  const [slots, setSlots]                     = useState<Slot[]>([]);
+  const [bookings, setBookings]               = useState<Booking[]>([]);
   const [waitlistEntries, setWaitlistEntries] = useState<WaitlistEntry[]>([]);
 
   const [loadingBiz, setLoadingBiz]     = useState(true);
   const [loadingSlots, setLoadingSlots] = useState(false);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
-
-  const [pageError, setPageError]     = useState<string | null>(null);
-  const [actionError, setActionError] = useState<string | null>(null);
+  const [pageError, setPageError]       = useState<string | null>(null);
+  const [confirmState, setConfirmState] = useState<ConfirmState | null>(null);
 
   const selectedBizRef = useRef<string>("");
   selectedBizRef.current = selectedBiz;
@@ -105,7 +96,6 @@ export function ClientDashboardPage() {
 
   const loadSlots = useCallback(async (bizId: string) => {
     setLoadingSlots(true);
-    setActionError(null);
     const { data, error } = await supabase
       .from("slots")
       .select("*")
@@ -139,76 +129,66 @@ export function ClientDashboardPage() {
   useEffect(() => {
     const channel = supabase
       .channel("client-dashboard")
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "slots" },
-        () => {
-          if (selectedBizRef.current) loadSlots(selectedBizRef.current);
-        }
-      )
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "bookings" },
-        () => {
-          if (profileIdRef.current) refresh();
-        }
-      )
-      .on(
-        "postgres_changes",
-        { event: "*", schema: "public", table: "waitlist_entries" },
-        () => {
-          if (profileIdRef.current) refresh();
-        }
-      )
+      .on("postgres_changes", { event: "*", schema: "public", table: "slots" }, () => {
+        if (selectedBizRef.current) loadSlots(selectedBizRef.current);
+      })
+      .on("postgres_changes", { event: "*", schema: "public", table: "bookings" }, () => {
+        if (profileIdRef.current) refresh();
+      })
+      .on("postgres_changes", { event: "*", schema: "public", table: "waitlist_entries" }, () => {
+        if (profileIdRef.current) refresh();
+      })
       .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
+    return () => { supabase.removeChannel(channel); };
   }, [loadSlots, refresh]);
 
-  const handleBook = async (slotId: string) => {
+  const handleBook = async (slotId: string, slotTitle: string) => {
     if (!profile?.id) return;
     setActionLoading(slotId);
-    setActionError(null);
-
     const { data, error } = await supabase.rpc("book_slot", {
-      p_slot_id: slotId,
+      p_slot_id:   slotId,
       p_client_id: profile.id,
     });
-
     const res = data as any;
     if (error || res?.success === false) {
-      setActionError(error?.message || res?.error || "booking failed");
+      toast.error(
+        error?.message ??
+        res?.error ??
+        "booking failed"
+      );
     } else {
+      toast.success(`"${slotTitle}" booked`);
       await refresh();
     }
     setActionLoading(null);
   };
 
-  const handleJoinWaitlist = async (slotId: string) => {
+  const handleJoinWaitlist = async (slotId: string, slotTitle: string) => {
     if (!profile?.id) return;
     setActionLoading(slotId);
-    setActionError(null);
-
     const { data, error } = await supabase.rpc("join_waitlist", {
-      p_slot_id: slotId,
+      p_slot_id:   slotId,
       p_client_id: profile.id,
     });
-
     const res = data as any;
     if (error || res?.success === false) {
-      setActionError(error?.message || res?.error || "waitlist failed");
+      toast.error(
+        error?.message ??
+        res?.error ??
+        "could not join waitlist"
+      );
     } else {
+      toast.success(`joined waitlist for "${slotTitle}"`);
       await refresh();
     }
     setActionLoading(null);
   };
 
-  const handleCancelBooking = async (slotId: string) => {
-    if (!profile?.id) return;
+  const executeCancelBooking = async () => {
+    if (!confirmState || !profile?.id) return;
+    const { slotId, title } = confirmState;
+    setConfirmState(null);
     setActionLoading(slotId);
-    setActionError(null);
 
     const { error } = await supabase.rpc("cancel_booking", {
       p_slot_id: slotId,
@@ -216,17 +196,19 @@ export function ClientDashboardPage() {
     });
 
     if (error) {
-      setActionError(error.message);
+      toast.error(error.message);
     } else {
+      toast.success(`booking for "${title}" cancelled`);
       await refresh();
     }
     setActionLoading(null);
   };
 
-  const handleLeaveWaitlist = async (slotId: string) => {
-    if (!profile?.id) return;
+  const executeLeaveWaitlist = async () => {
+    if (!confirmState || !profile?.id) return;
+    const { slotId, title } = confirmState;
+    setConfirmState(null);
     setActionLoading(slotId);
-    setActionError(null);
 
     const { error } = await supabase
       .from("waitlist_entries")
@@ -235,17 +217,89 @@ export function ClientDashboardPage() {
       .eq("client_id", profile.id);
 
     if (error) {
-      setActionError(error.message);
+      toast.error(error.message);
     } else {
+      toast.success(`left waitlist for "${title}"`);
       await refresh();
     }
     setActionLoading(null);
+  };
+
+  const handleConfirmAction = () => {
+    if (!confirmState) return;
+    if (confirmState.kind === "cancel_booking") executeCancelBooking();
+    else executeLeaveWaitlist();
+  };
+
+  const CONFIRM_COPY: Record<ConfirmKind, { heading: string; body: (t: string) => string; cta: string }> = {
+    cancel_booking: {
+      heading: "Cancel This Booking?",
+      body: (t) => `You are about to cancel your booking for "${t}". Your spot will be released to the next person on the waitlist.`,
+      cta: "Yes, Cancel Booking",
+    },
+    leave_waitlist: {
+      heading: "Leave The Waitlist?",
+      body: (t) => `You are about to remove yourself from the waitlist for "${t}". You will lose your current position in the queue.`,
+      cta: "Yes, Leave Waitlist",
+    },
   };
 
   const selectedBizName = businesses.find((b) => b.id === selectedBiz)?.name ?? "";
 
   return (
     <div className="min-h-screen bg-background text-foreground font-sans">
+      <Toaster
+        position="bottom-right"
+        toastOptions={{
+          className:
+            "border-2 border-foreground rounded-none shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] font-bold uppercase tracking-widest",
+        }}
+      />
+
+      {/* confirmation modal */}
+      {confirmState && (() => {
+        const copy = CONFIRM_COPY[confirmState.kind];
+        return (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-sm px-4">
+            <div className="w-full max-w-sm border-4 border-foreground bg-background shadow-[8px_8px_0px_0px_rgba(0,0,0,1)]">
+              <div className="border-b-2 border-foreground px-6 py-5">
+                <p
+                  className="text-xs font-black uppercase tracking-[0.25em] text-foreground/40"
+                  style={{ fontFamily: "'Syne', sans-serif" }}
+                >
+                  Confirmation Required
+                </p>
+                <h2
+                  className="mt-1 text-xl font-black uppercase tracking-tight"
+                  style={{ fontFamily: "'Syne', sans-serif" }}
+                >
+                  {copy.heading}
+                </h2>
+              </div>
+              <div className="px-6 py-5 flex flex-col gap-4">
+                <p className="text-sm font-medium text-foreground/60">
+                  {copy.body(confirmState.title)}
+                </p>
+                <div className="flex gap-3">
+                  <button
+                    onClick={handleConfirmAction}
+                    className="flex-1 bg-destructive text-destructive-foreground py-4 text-sm font-black uppercase tracking-widest hover:opacity-90 transition-opacity"
+                  >
+                    {copy.cta}
+                  </button>
+                  <button
+                    onClick={() => setConfirmState(null)}
+                    className="flex-1 border-2 border-foreground py-4 text-sm font-black uppercase tracking-widest hover:bg-foreground hover:text-background transition-colors"
+                  >
+                    Go Back
+                  </button>
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
+
       <header className="border-b-4 border-foreground px-6 py-5 flex items-center justify-between">
         <div className="flex flex-col gap-0.5">
           <span className="text-[10px] font-bold tracking-[0.3em] text-foreground/40 uppercase">
@@ -286,7 +340,6 @@ export function ClientDashboardPage() {
           >
             Select Business
           </label>
-
           {loadingBiz ? (
             <div className="flex items-center gap-2 border-b-4 border-foreground py-3 text-foreground/40">
               <Loader2 className="h-4 w-4 animate-spin" />
@@ -302,9 +355,7 @@ export function ClientDashboardPage() {
                 className="w-full appearance-none border-b-4 border-foreground bg-transparent pl-7 pr-8 py-3 text-xl font-bold outline-none focus:bg-foreground/5 cursor-pointer"
               >
                 {businesses.map((b) => (
-                  <option key={b.id} value={b.id}>
-                    {b.name}
-                  </option>
+                  <option key={b.id} value={b.id}>{b.name}</option>
                 ))}
               </select>
               <ChevronDown className="pointer-events-none absolute right-0 top-1/2 -translate-y-1/2 h-5 w-5 text-foreground/50" />
@@ -312,8 +363,7 @@ export function ClientDashboardPage() {
           )}
         </section>
 
-        {pageError   && <ErrorBlock message={pageError} />}
-        {actionError && <ErrorBlock message={actionError} />}
+        {pageError && <ErrorBlock message={pageError} />}
 
         {selectedBiz && (
           <section className="flex flex-col gap-4">
@@ -330,11 +380,10 @@ export function ClientDashboardPage() {
             </div>
 
             {loadingSlots ? (
-              <div className="flex items-center gap-3 border-2 border-foreground px-6 py-10 text-foreground/40">
-                <Loader2 className="h-5 w-5 animate-spin" />
-                <span className="text-sm font-bold uppercase tracking-widest">
-                  Fetching slots…
-                </span>
+              <div className="flex flex-col gap-3">
+                <SlotSkeleton />
+                <SlotSkeleton />
+                <SlotSkeleton />
               </div>
             ) : slots.length === 0 ? (
               <div className="border-2 border-dashed border-foreground/30 px-6 py-12 text-center">
@@ -348,7 +397,6 @@ export function ClientDashboardPage() {
                   const action  = resolveAction(slot, bookedSlotIds, waitlistedSlotIds);
                   const loading = actionLoading === slot.id;
                   const entry   = waitlistEntries.find((w) => w.slot_id === slot.id);
-
                   return (
                     <SlotCard
                       key={slot.id}
@@ -356,10 +404,14 @@ export function ClientDashboardPage() {
                       action={action}
                       loading={loading}
                       waitlistPosition={entry?.position}
-                      onBook={() => handleBook(slot.id)}
-                      onJoinWaitlist={() => handleJoinWaitlist(slot.id)}
-                      onCancelBooking={() => handleCancelBooking(slot.id)}
-                      onLeaveWaitlist={() => handleLeaveWaitlist(slot.id)}
+                      onBook={() => handleBook(slot.id, slot.title)}
+                      onJoinWaitlist={() => handleJoinWaitlist(slot.id, slot.title)}
+                      onCancelBooking={() =>
+                        setConfirmState({ slotId: slot.id, title: slot.title, kind: "cancel_booking" })
+                      }
+                      onLeaveWaitlist={() =>
+                        setConfirmState({ slotId: slot.id, title: slot.title, kind: "leave_waitlist" })
+                      }
                     />
                   );
                 })}
@@ -372,20 +424,34 @@ export function ClientDashboardPage() {
   );
 }
 
-function StatCell({
-  label,
-  value,
-  accent,
-}: {
-  label: string;
-  value: number;
-  accent: string;
-}) {
+// -- sub-components --
+
+function SlotSkeleton() {
+  return (
+    <div className="border-2 border-foreground/20 border-l-4 border-l-foreground/10 px-5 py-4">
+      <div className="flex flex-col sm:flex-row sm:items-center gap-4">
+        <div className="flex-1 flex flex-col gap-3">
+          <div className="flex items-center gap-3">
+            <div className="h-4 w-44 animate-pulse bg-foreground/10" />
+            <div className="h-4 w-16 animate-pulse bg-foreground/10" />
+          </div>
+          <div className="flex gap-5">
+            <div className="h-3 w-32 animate-pulse bg-foreground/10" />
+            <div className="h-3 w-28 animate-pulse bg-foreground/10" />
+            <div className="h-3 w-16 animate-pulse bg-foreground/10" />
+          </div>
+          <div className="h-1 w-full animate-pulse bg-foreground/10" />
+        </div>
+        <div className="h-9 w-28 animate-pulse bg-foreground/10 shrink-0" />
+      </div>
+    </div>
+  );
+}
+
+function StatCell({ label, value, accent }: { label: string; value: number; accent: string }) {
   return (
     <div className="flex flex-col gap-1 px-5 py-4">
-      <span className="text-[10px] font-bold uppercase tracking-[0.2em] text-foreground/40">
-        {label}
-      </span>
+      <span className="text-[10px] font-bold uppercase tracking-[0.2em] text-foreground/40">{label}</span>
       <span className={`text-3xl font-black leading-none ${accent}`}>{value}</span>
     </div>
   );
@@ -409,14 +475,8 @@ const ACTION_BORDER: Record<SlotAction, string> = {
 };
 
 function SlotCard({
-  slot,
-  action,
-  loading,
-  waitlistPosition,
-  onBook,
-  onJoinWaitlist,
-  onCancelBooking,
-  onLeaveWaitlist,
+  slot, action, loading, waitlistPosition,
+  onBook, onJoinWaitlist, onCancelBooking, onLeaveWaitlist,
 }: {
   slot: Slot;
   action: SlotAction;
@@ -433,11 +493,8 @@ function SlotCard({
 
   const fmt = (d: Date) =>
     d.toLocaleString(undefined, {
-      weekday: "short",
-      month:   "short",
-      day:     "numeric",
-      hour:    "2-digit",
-      minute:  "2-digit",
+      weekday: "short", month: "short", day: "numeric",
+      hour: "2-digit", minute: "2-digit",
     });
 
   return (
@@ -453,22 +510,11 @@ function SlotCard({
             </span>
             <StatusPill action={action} position={waitlistPosition} />
           </div>
-
           <div className="flex flex-wrap gap-x-5 gap-y-1 text-xs font-medium text-foreground/50 uppercase tracking-widest">
-            <span className="flex items-center gap-1.5">
-              <Calendar className="h-3 w-3" />
-              {fmt(starts)}
-            </span>
-            <span className="flex items-center gap-1.5">
-              <Clock4 className="h-3 w-3" />
-              ends {fmt(ends)}
-            </span>
-            <span className="flex items-center gap-1.5">
-              <Users className="h-3 w-3" />
-              {slot.booked_count}/{slot.capacity} booked
-            </span>
+            <span className="flex items-center gap-1.5"><Calendar className="h-3 w-3" />{fmt(starts)}</span>
+            <span className="flex items-center gap-1.5"><Clock4 className="h-3 w-3" />ends {fmt(ends)}</span>
+            <span className="flex items-center gap-1.5"><Users className="h-3 w-3" />{slot.booked_count}/{slot.capacity} booked</span>
           </div>
-
           <div className="h-1 w-full bg-foreground/10">
             <div
               className={`h-full transition-all ${fillPct >= 100 ? "bg-yellow-400" : "bg-green-500"}`}
@@ -476,7 +522,6 @@ function SlotCard({
             />
           </div>
         </div>
-
         <div className="shrink-0">
           <ActionButton
             action={action}
@@ -492,62 +537,24 @@ function SlotCard({
   );
 }
 
-function StatusPill({
-  action,
-  position,
-}: {
-  action: SlotAction;
-  position?: number;
-}) {
-  const configs: Record<
-    SlotAction,
-    { label: string; icon: React.ReactNode; cls: string }
-  > = {
-    booked: {
-      label: "Booked",
-      icon:  <CheckCircle2 className="h-3 w-3" />,
-      cls:   "border-green-500/40 text-green-500",
-    },
-    waitlisted: {
-      label: position ? `Queue #${position}` : "On Waitlist",
-      icon:  <Hourglass className="h-3 w-3" />,
-      cls:   "border-yellow-400/40 text-yellow-400",
-    },
-    book: {
-      label: "Available",
-      icon:  <CalendarPlus className="h-3 w-3" />,
-      cls:   "border-foreground/20 text-foreground/40",
-    },
-    join_waitlist: {
-      label: "Full",
-      icon:  <ListPlus className="h-3 w-3" />,
-      cls:   "border-orange-400/40 text-orange-400",
-    },
-    cancelled_slot: {
-      label: "Cancelled",
-      icon:  <XCircle className="h-3 w-3" />,
-      cls:   "border-foreground/20 text-foreground/30",
-    },
+function StatusPill({ action, position }: { action: SlotAction; position?: number }) {
+  const configs: Record<SlotAction, { label: string; icon: React.ReactNode; cls: string }> = {
+    booked:        { label: "Booked",                              icon: <CheckCircle2 className="h-3 w-3" />, cls: "border-green-500/40 text-green-500" },
+    waitlisted:    { label: position ? `Queue #${position}` : "On Waitlist", icon: <Hourglass className="h-3 w-3" />,    cls: "border-yellow-400/40 text-yellow-400" },
+    book:          { label: "Available",                           icon: <CalendarPlus className="h-3 w-3" />, cls: "border-foreground/20 text-foreground/40" },
+    join_waitlist: { label: "Full",                                icon: <ListPlus className="h-3 w-3" />,     cls: "border-orange-400/40 text-orange-400" },
+    cancelled_slot:{ label: "Cancelled",                           icon: <XCircle className="h-3 w-3" />,      cls: "border-foreground/20 text-foreground/30" },
   };
-
   const c = configs[action];
   return (
-    <span
-      className={`flex items-center gap-1 border text-[10px] font-black uppercase tracking-widest px-2 py-0.5 ${c.cls}`}
-    >
-      {c.icon}
-      {c.label}
+    <span className={`flex items-center gap-1 border text-[10px] font-black uppercase tracking-widest px-2 py-0.5 ${c.cls}`}>
+      {c.icon}{c.label}
     </span>
   );
 }
 
 function ActionButton({
-  action,
-  loading,
-  onBook,
-  onJoinWaitlist,
-  onCancelBooking,
-  onLeaveWaitlist,
+  action, loading, onBook, onJoinWaitlist, onCancelBooking, onLeaveWaitlist,
 }: {
   action: SlotAction;
   loading: boolean;
@@ -564,55 +571,34 @@ function ActionButton({
   if (loading) {
     return (
       <button disabled className={base}>
-        <Loader2 className="h-3.5 w-3.5 animate-spin" />
-        Working…
+        <Loader2 className="h-3.5 w-3.5 animate-spin" />Working…
       </button>
     );
   }
-
   if (action === "booked") {
     return (
-      <button
-        onClick={onCancelBooking}
-        className={`${base} hover:bg-destructive hover:border-destructive hover:text-destructive-foreground`}
-      >
-        <XCircle className="h-3.5 w-3.5" />
-        Cancel Booking
+      <button onClick={onCancelBooking} className={`${base} hover:bg-destructive hover:border-destructive hover:text-destructive-foreground`}>
+        <XCircle className="h-3.5 w-3.5" />Cancel Booking
       </button>
     );
   }
-
   if (action === "waitlisted") {
     return (
-      <button
-        onClick={onLeaveWaitlist}
-        className={`${base} hover:bg-yellow-400/10 hover:border-yellow-400 hover:text-yellow-400`}
-      >
-        <UserMinus className="h-3.5 w-3.5" />
-        Leave Waitlist
+      <button onClick={onLeaveWaitlist} className={`${base} hover:bg-yellow-400/10 hover:border-yellow-400 hover:text-yellow-400`}>
+        <UserMinus className="h-3.5 w-3.5" />Leave Waitlist
       </button>
     );
   }
-
   if (action === "book") {
     return (
-      <button
-        onClick={onBook}
-        className={`${base} bg-foreground text-background hover:bg-primary hover:text-foreground`}
-      >
-        <CalendarPlus className="h-3.5 w-3.5" />
-        Book Slot
+      <button onClick={onBook} className={`${base} bg-foreground text-background hover:bg-primary hover:text-foreground`}>
+        <CalendarPlus className="h-3.5 w-3.5" />Book Slot
       </button>
     );
   }
-
   return (
-    <button
-      onClick={onJoinWaitlist}
-      className={`${base} hover:bg-foreground hover:text-background`}
-    >
-      <ListPlus className="h-3.5 w-3.5" />
-      Join Waitlist
+    <button onClick={onJoinWaitlist} className={`${base} hover:bg-foreground hover:text-background`}>
+      <ListPlus className="h-3.5 w-3.5" />Join Waitlist
     </button>
   );
 }
