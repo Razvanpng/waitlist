@@ -6,13 +6,15 @@ import { toast, Toaster } from "sonner";
 import {
   Loader2, LogOut, Plus, Clock, Users, AlertTriangle,
   CheckSquare, XSquare, Calendar, UsersRound, X,
-  Phone, Mail, Hash,
+  Phone, Mail, Hash, Pencil,
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { useAuthStore } from "@/store/authSlice";
 import type { Database } from "@/types/database.types";
 
 type Slot = Database["public"]["Tables"]["slots"]["Row"];
+
+// -- schemas --
 
 const slotSchema = z
   .object({
@@ -28,6 +30,30 @@ const slotSchema = z
 
 type SlotFormValues = z.infer<typeof slotSchema>;
 
+function buildEditSchema(minCapacity: number) {
+  return z
+    .object({
+      title:     z.string().min(2, "title must be at least 2 characters"),
+      starts_at: z.string().min(1, "start time is required"),
+      ends_at:   z.string().min(1, "end time is required"),
+      capacity:  z.coerce
+        .number()
+        .int()
+        .min(
+          minCapacity,
+          minCapacity > 1
+            ? `capacity cannot be less than current bookings (${minCapacity})`
+            : "capacity must be at least 1"
+        ),
+    })
+    .refine((d) => new Date(d.ends_at) > new Date(d.starts_at), {
+      message: "end time must be after start time",
+      path: ["ends_at"],
+    });
+}
+
+// -- constants --
+
 const STATUS_STYLES: Record<Slot["status"], string> = {
   available: "border-l-4 border-l-green-500",
   booked:    "border-l-4 border-l-yellow-400",
@@ -39,6 +65,8 @@ const STATUS_LABEL: Record<Slot["status"], string> = {
   booked:    "FULL",
   cancelled: "CANCELLED",
 };
+
+// -- types --
 
 interface ConfirmState {
   slotId: string;
@@ -52,8 +80,6 @@ interface ClientsModalTarget {
 
 type TabMode = "active" | "history";
 
-// -- clients modal --
-
 interface BookingRow {
   id: string;
   profiles: { full_name: string | null; email: string; phone?: string | null } | null;
@@ -66,6 +92,174 @@ interface WaitlistRow {
   profiles: { full_name: string | null; email: string; phone?: string | null } | null;
 }
 
+// -- EditSlotModal --
+
+function EditSlotModal({
+  slot,
+  onClose,
+  onSaved,
+}: {
+  slot: Slot;
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const minCapacity = Math.max(1, slot.booked_count);
+  const editSchema  = buildEditSchema(minCapacity);
+
+  const toLocalDatetime = (iso: string) => {
+    const d = new Date(iso);
+    const pad = (n: number) => String(n).padStart(2, "0");
+    return (
+      `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}` +
+      `T${pad(d.getHours())}:${pad(d.getMinutes())}`
+    );
+  };
+
+  const {
+    register,
+    handleSubmit,
+    formState: { errors, isSubmitting },
+  } = useForm<SlotFormValues>({
+    resolver: zodResolver(editSchema),
+    defaultValues: {
+      title:     slot.title,
+      capacity:  slot.capacity,
+      starts_at: toLocalDatetime(slot.starts_at),
+      ends_at:   toLocalDatetime(slot.ends_at),
+    },
+  });
+
+  const onSubmit = async (values: SlotFormValues) => {
+    const { error } = await supabase
+      .from("slots")
+      .update({
+        title:     values.title,
+        capacity:  values.capacity,
+        starts_at: new Date(values.starts_at).toISOString(),
+        ends_at:   new Date(values.ends_at).toISOString(),
+      })
+      .eq("id", slot.id);
+
+    if (error) {
+      toast.error(error.message);
+      return;
+    }
+
+    toast.success(`"${values.title}" updated`);
+    onSaved();
+    onClose();
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-sm px-4">
+      <div className="w-full max-w-lg border-4 border-foreground bg-background shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] flex flex-col max-h-[90vh]">
+        {/* header */}
+        <div className="border-b-2 border-foreground px-6 py-5 flex items-start justify-between gap-4 shrink-0">
+          <div>
+            <p
+              className="text-[10px] font-black uppercase tracking-[0.25em] text-foreground/40"
+              style={{ fontFamily: "'Syne', sans-serif" }}
+            >
+              Editing Slot
+            </p>
+            <h2
+              className="mt-0.5 text-xl font-black uppercase tracking-tight leading-tight"
+              style={{ fontFamily: "'Syne', sans-serif" }}
+            >
+              {slot.title}
+            </h2>
+          </div>
+          <button
+            type="button"
+            onClick={onClose}
+            className="border-2 border-foreground p-1.5 hover:bg-foreground hover:text-background transition-colors shrink-0"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+
+        {/* form */}
+        <div className="overflow-y-auto flex-1">
+          <form
+            id="edit-slot-form"
+            onSubmit={handleSubmit(onSubmit)}
+            noValidate
+            className="px-6 py-7 flex flex-col gap-7"
+          >
+            {slot.booked_count > 0 && (
+              <div className="border-2 border-yellow-400/40 bg-yellow-400/5 px-4 py-3">
+                <p className="text-xs font-black uppercase tracking-widest text-yellow-500">
+                  ↳ {slot.booked_count} active booking
+                  {slot.booked_count > 1 ? "s" : ""} — capacity cannot go below{" "}
+                  {slot.booked_count}
+                </p>
+              </div>
+            )}
+
+            <div className="grid sm:grid-cols-2 gap-7">
+              <FormField label="Slot Title" error={errors.title?.message}>
+                <input
+                  {...register("title")}
+                  type="text"
+                  placeholder="e.g. Morning Consultation"
+                  className="border-b-4 border-foreground bg-transparent py-3 text-xl outline-none focus:bg-foreground/5 w-full"
+                />
+              </FormField>
+
+              <FormField label="Capacity" error={errors.capacity?.message}>
+                <input
+                  {...register("capacity")}
+                  type="number"
+                  min={minCapacity}
+                  className="border-b-4 border-foreground bg-transparent py-3 text-xl outline-none focus:bg-foreground/5 w-full"
+                />
+              </FormField>
+
+              <FormField label="Starts At" error={errors.starts_at?.message}>
+                <input
+                  {...register("starts_at")}
+                  type="datetime-local"
+                  className="border-b-4 border-foreground bg-transparent py-3 text-xl outline-none focus:bg-foreground/5 w-full"
+                />
+              </FormField>
+
+              <FormField label="Ends At" error={errors.ends_at?.message}>
+                <input
+                  {...register("ends_at")}
+                  type="datetime-local"
+                  className="border-b-4 border-foreground bg-transparent py-3 text-xl outline-none focus:bg-foreground/5 w-full"
+                />
+              </FormField>
+            </div>
+          </form>
+        </div>
+
+        {/* footer */}
+        <div className="border-t-2 border-foreground px-6 py-4 flex gap-3 shrink-0">
+          <button
+            type="submit"
+            form="edit-slot-form"
+            disabled={isSubmitting}
+            className="flex flex-1 items-center justify-center gap-3 bg-foreground py-4 text-sm font-black uppercase tracking-widest text-background hover:bg-primary hover:text-foreground transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
+          >
+            {isSubmitting && <Loader2 className="h-4 w-4 animate-spin" />}
+            {isSubmitting ? "Saving…" : "Save Changes"}
+          </button>
+          <button
+            type="button"
+            onClick={onClose}
+            className="border-2 border-foreground py-4 px-5 text-sm font-black uppercase tracking-widest hover:bg-foreground hover:text-background transition-colors"
+          >
+            Discard
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// -- ClientsModal --
+
 function ClientsModal({
   target,
   onClose,
@@ -73,10 +267,10 @@ function ClientsModal({
   target: ClientsModalTarget;
   onClose: () => void;
 }) {
-  const [bookings, setBookings]     = useState<BookingRow[]>([]);
-  const [waitlist, setWaitlist]     = useState<WaitlistRow[]>([]);
-  const [loading, setLoading]       = useState(true);
-  const [error, setError]           = useState<string | null>(null);
+  const [bookings, setBookings] = useState<BookingRow[]>([]);
+  const [waitlist, setWaitlist] = useState<WaitlistRow[]>([]);
+  const [loading, setLoading]   = useState(true);
+  const [error, setError]       = useState<string | null>(null);
 
   useEffect(() => {
     (async () => {
@@ -85,16 +279,16 @@ function ClientsModal({
 
       const [{ data: bData, error: bErr }, { data: wData, error: wErr }] =
         await Promise.all([
-          supabase
+          (supabase
             .from("bookings")
             .select("id, profiles(full_name, email, phone)")
-            .eq("slot_id", target.slotId) as any,
-          supabase
+            .eq("slot_id", target.slotId)) as any,
+          (supabase
             .from("waitlist_entries")
             .select("id, position, status, profiles(full_name, email, phone)")
             .eq("slot_id", target.slotId)
             .not("status", "in", '("expired","withdrawn")')
-            .order("position", { ascending: true }) as any,
+            .order("position", { ascending: true })) as any,
         ]);
 
       if (bErr || wErr) {
@@ -113,7 +307,6 @@ function ClientsModal({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-sm px-4">
       <div className="w-full max-w-lg border-4 border-foreground bg-background shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] flex flex-col max-h-[90vh]">
-        {/* header */}
         <div className="border-b-2 border-foreground px-6 py-5 flex items-start justify-between gap-4 shrink-0">
           <div>
             <p
@@ -137,7 +330,6 @@ function ClientsModal({
           </button>
         </div>
 
-        {/* body */}
         <div className="overflow-y-auto flex-1">
           {loading ? (
             <div className="flex items-center gap-3 px-6 py-10 text-foreground/40">
@@ -153,7 +345,6 @@ function ClientsModal({
             </div>
           ) : (
             <div className="flex flex-col divide-y-2 divide-foreground/10">
-              {/* confirmed bookings */}
               <section className="px-6 py-5 flex flex-col gap-4">
                 <div className="flex items-center gap-3">
                   <span
@@ -166,7 +357,6 @@ function ClientsModal({
                     {bookings.length}
                   </span>
                 </div>
-
                 {bookings.length === 0 ? (
                   <p className="text-xs font-black uppercase tracking-widest text-foreground/25 py-2">
                     No Clients
@@ -179,7 +369,7 @@ function ClientsModal({
                         index={i + 1}
                         name={displayName(b)}
                         email={b.profiles?.email}
-                        phone={b.profiles?.phone}
+                        phone={(b.profiles as any)?.phone}
                         accentClass="border-l-green-500"
                       />
                     ))}
@@ -187,7 +377,6 @@ function ClientsModal({
                 )}
               </section>
 
-              {/* waitlist */}
               <section className="px-6 py-5 flex flex-col gap-4">
                 <div className="flex items-center gap-3">
                   <span
@@ -200,7 +389,6 @@ function ClientsModal({
                     {waitlist.length}
                   </span>
                 </div>
-
                 {waitlist.length === 0 ? (
                   <p className="text-xs font-black uppercase tracking-widest text-foreground/25 py-2">
                     No Clients
@@ -213,7 +401,7 @@ function ClientsModal({
                         index={w.position}
                         name={displayName(w)}
                         email={w.profiles?.email}
-                        phone={w.profiles?.phone}
+                        phone={(w.profiles as any)?.phone}
                         badge={w.status}
                         accentClass="border-l-yellow-400"
                       />
@@ -225,7 +413,6 @@ function ClientsModal({
           )}
         </div>
 
-        {/* footer */}
         <div className="border-t-2 border-foreground px-6 py-4 shrink-0">
           <button
             onClick={onClose}
@@ -255,7 +442,9 @@ function ClientRow({
   accentClass: string;
 }) {
   return (
-    <div className={`border-2 border-foreground/20 border-l-4 ${accentClass} px-4 py-3 flex flex-col gap-1.5`}>
+    <div
+      className={`border-2 border-foreground/20 border-l-4 ${accentClass} px-4 py-3 flex flex-col gap-1.5`}
+    >
       <div className="flex items-center gap-2 flex-wrap">
         <span className="flex items-center gap-1 text-[10px] font-black text-foreground/30 uppercase tracking-widest">
           <Hash className="h-2.5 w-2.5" />{index}
@@ -298,9 +487,11 @@ export function DashboardPage() {
   const [fetchError, setFetchError] = useState<string | null>(null);
   const [loadingSlots, setLoadingSlots] = useState(true);
   const [formOpen, setFormOpen]         = useState(false);
+
   const [confirmCancel, setConfirmCancel]   = useState<ConfirmState | null>(null);
   const [clientsTarget, setClientsTarget]   = useState<ClientsModalTarget | null>(null);
-  const [activeTab, setActiveTab] = useState<TabMode>("active");
+  const [editTarget, setEditTarget]         = useState<Slot | null>(null);
+  const [activeTab, setActiveTab]           = useState<TabMode>("active");
 
   const businessIdRef = useRef<string | null>(null);
   businessIdRef.current = businessId;
@@ -368,7 +559,7 @@ export function DashboardPage() {
     return () => { supabase.removeChannel(channel); };
   }, [loadSlots]);
 
-  const onSubmit = async (values: SlotFormValues) => {
+  const onCreateSubmit = async (values: SlotFormValues) => {
     if (!businessId) return;
     const { error } = await supabase.from("slots").insert({
       business_id:  businessId,
@@ -386,9 +577,8 @@ export function DashboardPage() {
     await loadSlots(businessId);
   };
 
-  const confirmAndCancel = (slot: Slot) => {
+  const confirmAndCancel = (slot: Slot) =>
     setConfirmCancel({ slotId: slot.id, title: slot.title });
-  };
 
   const executeCancel = async () => {
     if (!confirmCancel || !businessId) return;
@@ -487,6 +677,15 @@ export function DashboardPage() {
         </div>
       )}
 
+      {/* edit slot modal */}
+      {editTarget && (
+        <EditSlotModal
+          slot={editTarget}
+          onClose={() => setEditTarget(null)}
+          onSaved={() => businessId && loadSlots(businessId)}
+        />
+      )}
+
       {/* clients roster modal */}
       {clientsTarget && (
         <ClientsModal
@@ -522,13 +721,15 @@ export function DashboardPage() {
       </header>
 
       <main className="mx-auto max-w-5xl px-6 py-10 flex flex-col gap-10">
+        {/* stat bar */}
         <div className="grid grid-cols-2 sm:grid-cols-4 border-2 border-foreground divide-x-2 divide-foreground">
           <StatCell label="Total Slots" value={stats.total} />
-          <StatCell label="Active Open"      value={stats.open}      accent="text-green-500" />
-          <StatCell label="Active Full"      value={stats.full}      accent="text-yellow-400" />
-          <StatCell label="Cancelled" value={stats.cancelled} accent="text-foreground/40" />
+          <StatCell label="Active Open" value={stats.open} accent="text-green-500" />
+          <StatCell label="Active Full" value={stats.full} accent="text-yellow-400" />
+          <StatCell label="Cancelled"   value={stats.cancelled} accent="text-foreground/40" />
         </div>
 
+        {/* create slot accordion */}
         <section className="border-2 border-foreground">
           <button
             onClick={() => setFormOpen((p) => !p)}
@@ -545,7 +746,7 @@ export function DashboardPage() {
 
           {formOpen && (
             <form
-              onSubmit={handleSubmit(onSubmit)}
+              onSubmit={handleSubmit(onCreateSubmit)}
               noValidate
               className="px-6 py-7 flex flex-col gap-7 border-t-2 border-foreground"
             >
@@ -605,8 +806,9 @@ export function DashboardPage() {
           )}
         </section>
 
+        {/* slot list */}
         <section className="flex flex-col gap-4">
-           <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 border-b-4 border-foreground pb-4">
+          <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 border-b-4 border-foreground pb-4">
              <div className="flex items-baseline gap-4">
               <h2
                 className="text-2xl font-black uppercase tracking-widest leading-none"
@@ -654,7 +856,7 @@ export function DashboardPage() {
           ) : displayedSlots.length === 0 && !fetchError ? (
             <div className="border-2 border-dashed border-foreground/30 px-6 py-12 text-center">
               <p className="text-sm font-bold uppercase tracking-widest text-foreground/30">
-                 No slots found in this category
+                No slots found in this category
               </p>
             </div>
           ) : (
@@ -664,6 +866,7 @@ export function DashboardPage() {
                   key={slot.id}
                   slot={slot}
                   isPast={activeTab === "history"}
+                  onEdit={() => setEditTarget(slot)}
                   onCancel={() => confirmAndCancel(slot)}
                   onRestore={handleRestore}
                   onViewClients={() =>
@@ -698,7 +901,8 @@ function SlotSkeleton() {
           <div className="h-1.5 w-full animate-pulse bg-foreground/10" />
         </div>
         <div className="flex gap-2 shrink-0">
-          <div className="h-9 w-28 animate-pulse bg-foreground/10" />
+          <div className="h-9 w-16 animate-pulse bg-foreground/10" />
+          <div className="h-9 w-24 animate-pulse bg-foreground/10" />
           <div className="h-9 w-20 animate-pulse bg-foreground/10" />
         </div>
       </div>
@@ -761,12 +965,14 @@ function ErrorBlock({ message }: { message: string }) {
 function SlotCard({
   slot,
   isPast,
+  onEdit,
   onCancel,
   onRestore,
   onViewClients,
 }: {
   slot: Slot;
   isPast: boolean;
+  onEdit: () => void;
   onCancel: () => void;
   onRestore: (id: string) => void;
   onViewClients: () => void;
@@ -825,6 +1031,16 @@ function SlotCard({
         </div>
 
         <div className="flex flex-wrap gap-2 shrink-0">
+          {!isPast && slot.status !== "cancelled" && (
+            <button
+              onClick={onEdit}
+              className="flex items-center gap-1.5 border-2 border-foreground px-3 py-2 text-xs font-bold uppercase tracking-widest hover:bg-foreground hover:text-background transition-colors"
+            >
+              <Pencil className="h-3.5 w-3.5" />
+              Edit
+            </button>
+          )}
+
           <button
             onClick={onViewClients}
             className="flex items-center gap-1.5 border-2 border-foreground px-3 py-2 text-xs font-bold uppercase tracking-widest hover:bg-foreground hover:text-background transition-colors"
