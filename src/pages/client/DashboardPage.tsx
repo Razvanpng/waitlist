@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, useRef } from "react";
 import {
   Loader2,
   LogOut,
@@ -19,9 +19,9 @@ import { supabase } from "@/lib/supabase";
 import { useAuthStore } from "@/store/authSlice";
 import type { Database } from "@/types/database.types";
 
-type Slot = Database["public"]["Tables"]["slots"]["Row"];
-type Business = Database["public"]["Tables"]["businesses"]["Row"];
-type Booking = Database["public"]["Tables"]["bookings"]["Row"];
+type Slot          = Database["public"]["Tables"]["slots"]["Row"];
+type Business      = Database["public"]["Tables"]["businesses"]["Row"];
+type Booking       = Database["public"]["Tables"]["bookings"]["Row"];
 type WaitlistEntry = Database["public"]["Tables"]["waitlist_entries"]["Row"];
 
 type SlotAction =
@@ -46,21 +46,31 @@ function resolveAction(
 export function ClientDashboardPage() {
   const { profile, signOut } = useAuthStore();
 
-  const [businesses, setBusinesses] = useState<Business[]>([]);
-  const [selectedBiz, setSelectedBiz] = useState<string>("");
-  const [slots, setSlots] = useState<Slot[]>([]);
-  const [bookings, setBookings] = useState<Booking[]>([]);
+  const [businesses, setBusinesses]       = useState<Business[]>([]);
+  const [selectedBiz, setSelectedBiz]     = useState<string>("");
+  const [slots, setSlots]                 = useState<Slot[]>([]);
+  const [bookings, setBookings]           = useState<Booking[]>([]);
   const [waitlistEntries, setWaitlistEntries] = useState<WaitlistEntry[]>([]);
 
-  const [loadingBiz, setLoadingBiz] = useState(true);
+  const [loadingBiz, setLoadingBiz]     = useState(true);
   const [loadingSlots, setLoadingSlots] = useState(false);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
 
-  const [pageError, setPageError] = useState<string | null>(null);
+  const [pageError, setPageError]     = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
 
+  const selectedBizRef = useRef<string>("");
+  selectedBizRef.current = selectedBiz;
+
+  const profileIdRef = useRef<string | undefined>(undefined);
+  profileIdRef.current = profile?.id;
+
   const bookedSlotIds = new Set(bookings.map((b) => b.slot_id));
-  const waitlistedSlotIds = new Set(waitlistEntries.map((w) => w.slot_id));
+  const waitlistedSlotIds = new Set(
+    waitlistEntries
+      .filter((w) => !["confirmed", "expired", "withdrawn"].includes(w.status))
+      .map((w) => w.slot_id)
+  );
 
   useEffect(() => {
     (async () => {
@@ -87,7 +97,7 @@ export function ClientDashboardPage() {
         .from("waitlist_entries")
         .select("*")
         .eq("client_id", profile.id)
-        .in("status", ["waiting"]),
+        .not("status", "in", '("confirmed","expired","withdrawn")'),
     ]);
     if (bData) setBookings(bData);
     if (wData) setWaitlistEntries(wData);
@@ -100,9 +110,8 @@ export function ClientDashboardPage() {
       .from("slots")
       .select("*")
       .eq("business_id", bizId)
-      .in("status", ["available", "booked"])
+      .neq("status", "cancelled")
       .order("starts_at", { ascending: true });
-      
     if (error) {
       setPageError(error.message);
     } else {
@@ -120,12 +129,43 @@ export function ClientDashboardPage() {
     loadClientState();
   }, [loadClientState]);
 
-  const refresh = async () => {
+  const refresh = useCallback(async () => {
     await Promise.all([
       loadClientState(),
-      selectedBiz ? loadSlots(selectedBiz) : Promise.resolve(),
+      selectedBizRef.current ? loadSlots(selectedBizRef.current) : Promise.resolve(),
     ]);
-  };
+  }, [loadClientState, loadSlots]);
+
+  useEffect(() => {
+    const channel = supabase
+      .channel("client-dashboard")
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "slots" },
+        () => {
+          if (selectedBizRef.current) loadSlots(selectedBizRef.current);
+        }
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "bookings" },
+        () => {
+          if (profileIdRef.current) refresh();
+        }
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "waitlist_entries" },
+        () => {
+          if (profileIdRef.current) refresh();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  }, [loadSlots, refresh]);
 
   const handleBook = async (slotId: string) => {
     if (!profile?.id) return;
@@ -233,8 +273,7 @@ export function ClientDashboardPage() {
     setActionLoading(null);
   };
 
-  const selectedBizName =
-    businesses.find((b) => b.id === selectedBiz)?.name ?? "";
+  const selectedBizName = businesses.find((b) => b.id === selectedBiz)?.name ?? "";
 
   return (
     <div className="min-h-screen bg-background text-foreground font-sans">
@@ -266,21 +305,9 @@ export function ClientDashboardPage() {
 
       <main className="mx-auto max-w-4xl px-6 py-10 flex flex-col gap-10">
         <div className="grid grid-cols-3 border-2 border-foreground divide-x-2 divide-foreground">
-          <StatCell
-            label="My Bookings"
-            value={bookings.length}
-            accent="text-green-500"
-          />
-          <StatCell
-            label="Waitlists"
-            value={waitlistEntries.length}
-            accent="text-yellow-400"
-          />
-          <StatCell
-            label="Slots Shown"
-            value={slots.length}
-            accent="text-foreground"
-          />
+          <StatCell label="My Bookings" value={bookings.length}        accent="text-green-500" />
+          <StatCell label="Waitlists"   value={waitlistEntries.length} accent="text-yellow-400" />
+          <StatCell label="Slots Shown" value={slots.length}           accent="text-foreground" />
         </div>
 
         <section className="flex flex-col gap-3">
@@ -294,9 +321,7 @@ export function ClientDashboardPage() {
           {loadingBiz ? (
             <div className="flex items-center gap-2 border-b-4 border-foreground py-3 text-foreground/40">
               <Loader2 className="h-4 w-4 animate-spin" />
-              <span className="text-sm font-bold uppercase tracking-widest">
-                Loading…
-              </span>
+              <span className="text-sm font-bold uppercase tracking-widest">Loading…</span>
             </div>
           ) : (
             <div className="relative">
@@ -305,11 +330,7 @@ export function ClientDashboardPage() {
                 id="biz-select"
                 value={selectedBiz}
                 onChange={(e) => setSelectedBiz(e.target.value)}
-                className="
-                  w-full appearance-none border-b-4 border-foreground bg-transparent
-                  pl-7 pr-8 py-3 text-xl font-bold outline-none
-                  focus:bg-foreground/5 cursor-pointer
-                "
+                className="w-full appearance-none border-b-4 border-foreground bg-transparent pl-7 pr-8 py-3 text-xl font-bold outline-none focus:bg-foreground/5 cursor-pointer"
               >
                 {businesses.map((b) => (
                   <option key={b.id} value={b.id}>
@@ -322,7 +343,7 @@ export function ClientDashboardPage() {
           )}
         </section>
 
-        {pageError && <ErrorBlock message={pageError} />}
+        {pageError   && <ErrorBlock message={pageError} />}
         {actionError && <ErrorBlock message={actionError} />}
 
         {selectedBiz && (
@@ -332,9 +353,7 @@ export function ClientDashboardPage() {
                 className="text-xl font-black uppercase tracking-widest"
                 style={{ fontFamily: "'Syne', sans-serif" }}
               >
-                {selectedBizName
-                  ? `${selectedBizName} — Slots`
-                  : "Available Slots"}
+                {selectedBizName ? `${selectedBizName} — Slots` : "Available Slots"}
               </h2>
               <span className="text-xs text-foreground/40 uppercase tracking-widest font-bold">
                 {slots.length} listed
@@ -357,15 +376,9 @@ export function ClientDashboardPage() {
             ) : (
               <div className="flex flex-col gap-3">
                 {slots.map((slot) => {
-                  const action = resolveAction(
-                    slot,
-                    bookedSlotIds,
-                    waitlistedSlotIds
-                  );
+                  const action  = resolveAction(slot, bookedSlotIds, waitlistedSlotIds);
                   const loading = actionLoading === slot.id;
-                  const entry = waitlistEntries.find(
-                    (w) => w.slot_id === slot.id
-                  );
+                  const entry   = waitlistEntries.find((w) => w.slot_id === slot.id);
 
                   return (
                     <SlotCard
@@ -404,9 +417,7 @@ function StatCell({
       <span className="text-[10px] font-bold uppercase tracking-[0.2em] text-foreground/40">
         {label}
       </span>
-      <span className={`text-3xl font-black leading-none ${accent}`}>
-        {value}
-      </span>
+      <span className={`text-3xl font-black leading-none ${accent}`}>{value}</span>
     </div>
   );
 }
@@ -415,19 +426,17 @@ function ErrorBlock({ message }: { message: string }) {
   return (
     <div className="flex items-start gap-3 bg-destructive text-destructive-foreground p-5">
       <AlertTriangle className="h-5 w-5 mt-0.5 shrink-0" />
-      <p className="text-base font-bold uppercase tracking-wide leading-snug">
-        {message}
-      </p>
+      <p className="text-base font-bold uppercase tracking-wide leading-snug">{message}</p>
     </div>
   );
 }
 
 const ACTION_BORDER: Record<SlotAction, string> = {
-  booked:        "border-l-4 border-l-green-500",
-  waitlisted:    "border-l-4 border-l-yellow-400",
-  book:          "border-l-4 border-l-foreground/20",
-  join_waitlist: "border-l-4 border-l-orange-400",
-  cancelled_slot:"border-l-4 border-l-foreground/10 opacity-40",
+  booked:         "border-l-4 border-l-green-500",
+  waitlisted:     "border-l-4 border-l-yellow-400",
+  book:           "border-l-4 border-l-foreground/20",
+  join_waitlist:  "border-l-4 border-l-orange-400",
+  cancelled_slot: "border-l-4 border-l-foreground/10 opacity-40",
 };
 
 function SlotCard({
@@ -449,26 +458,21 @@ function SlotCard({
   onCancelBooking: () => void;
   onLeaveWaitlist: () => void;
 }) {
-  const starts = new Date(slot.starts_at);
-  const ends = new Date(slot.ends_at);
-  const fillPct = Math.min(
-    100,
-    Math.round((slot.booked_count / slot.capacity) * 100)
-  );
+  const starts  = new Date(slot.starts_at);
+  const ends    = new Date(slot.ends_at);
+  const fillPct = Math.min(100, Math.round((slot.booked_count / slot.capacity) * 100));
 
   const fmt = (d: Date) =>
     d.toLocaleString(undefined, {
       weekday: "short",
-      month: "short",
-      day: "numeric",
-      hour: "2-digit",
-      minute: "2-digit",
+      month:   "short",
+      day:     "numeric",
+      hour:    "2-digit",
+      minute:  "2-digit",
     });
 
   return (
-    <div
-      className={`border-2 border-foreground bg-background ${ACTION_BORDER[action]}`}
-    >
+    <div className={`border-2 border-foreground bg-background ${ACTION_BORDER[action]}`}>
       <div className="px-5 py-4 flex flex-col sm:flex-row sm:items-center gap-4">
         <div className="flex-1 flex flex-col gap-2 min-w-0">
           <div className="flex flex-wrap items-center gap-2">
@@ -498,9 +502,7 @@ function SlotCard({
 
           <div className="h-1 w-full bg-foreground/10">
             <div
-              className={`h-full transition-all ${
-                fillPct >= 100 ? "bg-yellow-400" : "bg-green-500"
-              }`}
+              className={`h-full transition-all ${fillPct >= 100 ? "bg-yellow-400" : "bg-green-500"}`}
               style={{ width: `${fillPct}%` }}
             />
           </div>
@@ -534,28 +536,28 @@ function StatusPill({
   > = {
     booked: {
       label: "Booked",
-      icon: <CheckCircle2 className="h-3 w-3" />,
-      cls: "border-green-500/40 text-green-500",
+      icon:  <CheckCircle2 className="h-3 w-3" />,
+      cls:   "border-green-500/40 text-green-500",
     },
     waitlisted: {
       label: position ? `Queue #${position}` : "On Waitlist",
-      icon: <Hourglass className="h-3 w-3" />,
-      cls: "border-yellow-400/40 text-yellow-400",
+      icon:  <Hourglass className="h-3 w-3" />,
+      cls:   "border-yellow-400/40 text-yellow-400",
     },
     book: {
       label: "Available",
-      icon: <CalendarPlus className="h-3 w-3" />,
-      cls: "border-foreground/20 text-foreground/40",
+      icon:  <CalendarPlus className="h-3 w-3" />,
+      cls:   "border-foreground/20 text-foreground/40",
     },
     join_waitlist: {
       label: "Full",
-      icon: <ListPlus className="h-3 w-3" />,
-      cls: "border-orange-400/40 text-orange-400",
+      icon:  <ListPlus className="h-3 w-3" />,
+      cls:   "border-orange-400/40 text-orange-400",
     },
     cancelled_slot: {
       label: "Cancelled",
-      icon: <XCircle className="h-3 w-3" />,
-      cls: "border-foreground/20 text-foreground/30",
+      icon:  <XCircle className="h-3 w-3" />,
+      cls:   "border-foreground/20 text-foreground/30",
     },
   };
 
