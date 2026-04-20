@@ -1,10 +1,11 @@
 import { useEffect, useState, useCallback, useRef } from "react";
 import { toast, Toaster } from "sonner";
-import { Loader2, LogOut, Building2, ChevronDown } from "lucide-react";
+import { Loader2, LogOut, Building2, ChevronDown, UserCircle } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { useAuthStore } from "@/store/authSlice";
 
 import { StatCell, SlotSkeleton, ErrorBlock } from "@/components/ui/DashboardUI";
+import { ProfileSettingsModal } from "@/components/ui/ProfileSettingsModal";
 import { 
   Slot, SlotAction, ConfirmState, PhoneModal, ActionConfirmModal, ClientSlotCard 
 } from "./components/ClientComponents";
@@ -36,6 +37,7 @@ export function ClientDashboardPage() {
   const [activeTab, setActiveTab] = useState<TabMode>("active");
 
   const [showPhoneModal, setShowPhoneModal] = useState(false);
+  const [showProfileSettings, setShowProfileSettings] = useState(false);
   const [phoneNumber, setPhoneNumber] = useState("");
   const [pendingAction, setPendingAction] = useState<(() => void) | null>(null);
   const [savingPhone, setSavingPhone] = useState(false);
@@ -154,6 +156,7 @@ export function ClientDashboardPage() {
     <div className="min-h-screen bg-background text-foreground font-sans">
       <Toaster position="bottom-right" toastOptions={{ className: "border-2 border-foreground rounded-none shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] font-bold uppercase tracking-widest" }} />
 
+      {showProfileSettings && <ProfileSettingsModal profile={profile} onClose={() => setShowProfileSettings(false)} />}
       {showPhoneModal && <PhoneModal phoneNumber={phoneNumber} setPhoneNumber={setPhoneNumber} onSave={savePhoneAndContinue} onCancel={() => setShowPhoneModal(false)} isSaving={savingPhone} />}
       {confirmState && <ActionConfirmModal state={confirmState} onConfirm={confirmState.kind === "cancel_booking" ? executeCancelBooking : executeLeaveWaitlist} onCancel={() => setConfirmState(null)} />}
 
@@ -163,7 +166,13 @@ export function ClientDashboardPage() {
           <h1 className="text-2xl font-black uppercase tracking-tight leading-none" style={{ fontFamily: "'Syne', sans-serif" }}>Client Terminal</h1>
         </div>
         <div className="flex items-center gap-4">
-          <span className="hidden sm:block text-xs font-medium text-foreground/50 uppercase tracking-widest">{profile?.full_name ?? profile?.email}</span>
+          <button
+            onClick={() => setShowProfileSettings(true)}
+            className="hidden sm:flex items-center gap-2 text-xs font-bold text-foreground/50 hover:text-foreground uppercase tracking-widest transition-colors"
+          >
+            <UserCircle className="h-4 w-4" />
+            {profile?.full_name ?? profile?.email}
+          </button>
           <button onClick={() => signOut()} className="flex items-center gap-2 border-2 border-foreground px-4 py-2 text-xs font-bold uppercase tracking-widest hover:bg-foreground hover:text-background transition-colors"><LogOut className="h-3.5 w-3.5" /> Exit</button>
         </div>
       </header>
