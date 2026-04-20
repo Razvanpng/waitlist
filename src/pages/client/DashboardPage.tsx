@@ -3,7 +3,7 @@ import { toast, Toaster } from "sonner";
 import {
   Loader2, LogOut, CheckCircle2, Clock4, CalendarPlus,
   ListPlus, XCircle, UserMinus, AlertTriangle,
-  Building2, ChevronDown, Calendar, Users, Hourglass,
+  Building2, ChevronDown, Calendar, Users, Hourglass, Smartphone
 } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { useAuthStore } from "@/store/authSlice";
@@ -22,6 +22,8 @@ interface ConfirmState {
   title: string;
   kind: ConfirmKind;
 }
+
+type TabMode = "active" | "history";
 
 function resolveAction(
   slot: Slot,
@@ -48,13 +50,30 @@ export function ClientDashboardPage() {
   const [loadingSlots, setLoadingSlots] = useState(false);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
   const [pageError, setPageError]       = useState<string | null>(null);
+  
   const [confirmState, setConfirmState] = useState<ConfirmState | null>(null);
+  const [activeTab, setActiveTab] = useState<TabMode>("active");
+
+  // Phone modal state
+  const [showPhoneModal, setShowPhoneModal] = useState(false);
+  const [phoneNumber, setPhoneNumber] = useState("");
+  const [pendingAction, setPendingAction] = useState<(() => void) | null>(null);
+  const [savingPhone, setSavingPhone] = useState(false);
+  // We keep a local copy of the phone to update immediately without waiting for auth refresh
+  const [localPhone, setLocalPhone] = useState<string | null>(null);
 
   const selectedBizRef = useRef<string>("");
   selectedBizRef.current = selectedBiz;
 
   const profileIdRef = useRef<string | undefined>(undefined);
   profileIdRef.current = profile?.id;
+
+  // Initialize local phone from profile
+  useEffect(() => {
+    if (profile && profile.phone !== undefined) {
+      setLocalPhone(profile.phone);
+    }
+  }, [profile]);
 
   const bookedSlotIds = new Set(bookings.map((b) => b.slot_id));
   const waitlistedSlotIds = new Set(
@@ -141,6 +160,44 @@ export function ClientDashboardPage() {
       .subscribe();
     return () => { supabase.removeChannel(channel); };
   }, [loadSlots, refresh]);
+
+  // Interceptor function
+  const requirePhone = (action: () => void) => {
+    if (!localPhone || localPhone.trim() === "") {
+      setPendingAction(() => action);
+      setShowPhoneModal(true);
+    } else {
+      action();
+    }
+  };
+
+  const savePhoneAndContinue = async () => {
+    if (!profile?.id) return;
+    if (phoneNumber.trim().length < 6) {
+      toast.error("Please enter a valid phone number");
+      return;
+    }
+    
+    setSavingPhone(true);
+    const { error } = await supabase
+      .from("profiles")
+      .update({ phone: phoneNumber })
+      .eq("id", profile.id);
+
+    setSavingPhone(false);
+
+    if (error) {
+      toast.error(error.message);
+    } else {
+      setLocalPhone(phoneNumber);
+      setShowPhoneModal(false);
+      toast.success("Phone number saved");
+      if (pendingAction) {
+        pendingAction();
+        setPendingAction(null);
+      }
+    }
+  };
 
   const handleBook = async (slotId: string, slotTitle: string) => {
     if (!profile?.id) return;
@@ -246,6 +303,11 @@ export function ClientDashboardPage() {
 
   const selectedBizName = businesses.find((b) => b.id === selectedBiz)?.name ?? "";
 
+  const currentTime = new Date().getTime();
+  const activeSlots = slots.filter((s) => new Date(s.ends_at).getTime() >= currentTime);
+  const pastSlots = slots.filter((s) => new Date(s.ends_at).getTime() < currentTime);
+  const displayedSlots = activeTab === "active" ? activeSlots : pastSlots;
+
   return (
     <div className="min-h-screen bg-background text-foreground font-sans">
       <Toaster
@@ -255,6 +317,67 @@ export function ClientDashboardPage() {
             "border-2 border-foreground rounded-none shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] font-bold uppercase tracking-widest",
         }}
       />
+
+      {/* Phone modal */}
+      {showPhoneModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-sm px-4">
+          <div className="w-full max-w-sm border-4 border-foreground bg-background shadow-[8px_8px_0px_0px_rgba(0,0,0,1)]">
+            <div className="border-b-2 border-foreground px-6 py-5">
+              <p
+                className="text-xs font-black uppercase tracking-[0.25em] text-foreground/40"
+                style={{ fontFamily: "'Syne', sans-serif" }}
+              >
+                Contact Details
+              </p>
+              <h2
+                className="mt-1 text-xl font-black uppercase tracking-tight flex items-center gap-2"
+                style={{ fontFamily: "'Syne', sans-serif" }}
+              >
+                <Smartphone className="h-5 w-5" /> Phone Required
+              </h2>
+            </div>
+            <div className="px-6 py-5 flex flex-col gap-5">
+              <p className="text-sm font-medium text-foreground/60">
+                To reserve a spot or join the waitlist, please provide a valid phone number so the business can contact you if needed.
+              </p>
+              
+              <div className="flex flex-col gap-2">
+                <label className="text-[10px] font-bold uppercase tracking-[0.25em] text-foreground/50">
+                  Phone Number
+                </label>
+                <input
+                  type="tel"
+                  value={phoneNumber}
+                  onChange={(e) => setPhoneNumber(e.target.value)}
+                  placeholder="e.g. +40 700 000 000"
+                  className="border-b-4 border-foreground bg-transparent py-3 text-xl outline-none focus:bg-foreground/5 w-full"
+                  autoFocus
+                />
+              </div>
+
+              <div className="flex gap-3 mt-2">
+                <button
+                  onClick={savePhoneAndContinue}
+                  disabled={savingPhone}
+                  className="flex-1 flex items-center justify-center gap-2 bg-foreground text-background py-4 text-sm font-black uppercase tracking-widest hover:bg-primary hover:text-foreground transition-all disabled:opacity-50"
+                >
+                  {savingPhone && <Loader2 className="h-4 w-4 animate-spin" />}
+                  Save & Continue
+                </button>
+                <button
+                  onClick={() => {
+                    setShowPhoneModal(false);
+                    setPendingAction(null);
+                  }}
+                  className="px-4 border-2 border-foreground py-4 text-sm font-black uppercase tracking-widest hover:bg-foreground hover:text-background transition-colors"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* confirmation modal */}
       {confirmState && (() => {
@@ -330,7 +453,7 @@ export function ClientDashboardPage() {
         <div className="grid grid-cols-3 border-2 border-foreground divide-x-2 divide-foreground">
           <StatCell label="My Bookings" value={bookings.length}        accent="text-green-500" />
           <StatCell label="Waitlists"   value={waitlistEntries.length} accent="text-yellow-400" />
-          <StatCell label="Slots Shown" value={slots.length}           accent="text-foreground" />
+          <StatCell label="Active Slots" value={activeSlots.length}    accent="text-foreground" />
         </div>
 
         <section className="flex flex-col gap-3">
@@ -367,16 +490,41 @@ export function ClientDashboardPage() {
 
         {selectedBiz && (
           <section className="flex flex-col gap-4">
-            <div className="flex items-baseline justify-between">
-              <h2
-                className="text-xl font-black uppercase tracking-widest"
-                style={{ fontFamily: "'Syne', sans-serif" }}
-              >
-                {selectedBizName ? `${selectedBizName} — Slots` : "Available Slots"}
-              </h2>
-              <span className="text-xs text-foreground/40 uppercase tracking-widest font-bold">
-                {slots.length} listed
-              </span>
+            <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 border-b-4 border-foreground pb-4">
+              <div className="flex items-baseline gap-4">
+                <h2
+                  className="text-2xl font-black uppercase tracking-widest leading-none"
+                  style={{ fontFamily: "'Syne', sans-serif" }}
+                >
+                  {selectedBizName ? `${selectedBizName} — Slots` : "Available Slots"}
+                </h2>
+                <span className="text-xs text-foreground/40 uppercase tracking-widest font-bold">
+                  {displayedSlots.length} items
+                </span>
+              </div>
+
+               <div className="flex bg-foreground p-1 w-full sm:w-auto">
+                <button
+                  onClick={() => setActiveTab("active")}
+                  className={`flex-1 sm:w-32 py-2 text-xs font-black uppercase tracking-widest transition-colors ${
+                    activeTab === "active"
+                      ? "bg-background text-foreground"
+                      : "text-background hover:bg-background/20"
+                  }`}
+                >
+                  Active
+                </button>
+                <button
+                  onClick={() => setActiveTab("history")}
+                  className={`flex-1 sm:w-32 py-2 text-xs font-black uppercase tracking-widest transition-colors ${
+                    activeTab === "history"
+                      ? "bg-background text-foreground"
+                      : "text-background hover:bg-background/20"
+                  }`}
+                >
+                  History
+                </button>
+              </div>
             </div>
 
             {loadingSlots ? (
@@ -385,15 +533,15 @@ export function ClientDashboardPage() {
                 <SlotSkeleton />
                 <SlotSkeleton />
               </div>
-            ) : slots.length === 0 ? (
+            ) : displayedSlots.length === 0 ? (
               <div className="border-2 border-dashed border-foreground/30 px-6 py-12 text-center">
                 <p className="text-sm font-bold uppercase tracking-widest text-foreground/30">
-                  No open slots for this business
+                  No slots found in this category
                 </p>
               </div>
             ) : (
               <div className="flex flex-col gap-3">
-                {slots.map((slot) => {
+                {displayedSlots.map((slot) => {
                   const action  = resolveAction(slot, bookedSlotIds, waitlistedSlotIds);
                   const loading = actionLoading === slot.id;
                   const entry   = waitlistEntries.find((w) => w.slot_id === slot.id);
@@ -403,9 +551,10 @@ export function ClientDashboardPage() {
                       slot={slot}
                       action={action}
                       loading={loading}
+                      isPast={activeTab === "history"}
                       waitlistPosition={entry?.position}
-                      onBook={() => handleBook(slot.id, slot.title)}
-                      onJoinWaitlist={() => handleJoinWaitlist(slot.id, slot.title)}
+                      onBook={() => requirePhone(() => handleBook(slot.id, slot.title))}
+                      onJoinWaitlist={() => requirePhone(() => handleJoinWaitlist(slot.id, slot.title))}
                       onCancelBooking={() =>
                         setConfirmState({ slotId: slot.id, title: slot.title, kind: "cancel_booking" })
                       }
@@ -475,12 +624,13 @@ const ACTION_BORDER: Record<SlotAction, string> = {
 };
 
 function SlotCard({
-  slot, action, loading, waitlistPosition,
+  slot, action, loading, isPast, waitlistPosition,
   onBook, onJoinWaitlist, onCancelBooking, onLeaveWaitlist,
 }: {
   slot: Slot;
   action: SlotAction;
   loading: boolean;
+  isPast: boolean;
   waitlistPosition?: number;
   onBook: () => void;
   onJoinWaitlist: () => void;
@@ -498,7 +648,7 @@ function SlotCard({
     });
 
   return (
-    <div className={`border-2 border-foreground bg-background ${ACTION_BORDER[action]}`}>
+    <div className={`border-2 border-foreground ${isPast ? "border-l-4 border-l-foreground/20 opacity-70" : ACTION_BORDER[action]} bg-background`}>
       <div className="px-5 py-4 flex flex-col sm:flex-row sm:items-center gap-4">
         <div className="flex-1 flex flex-col gap-2 min-w-0">
           <div className="flex flex-wrap items-center gap-2">
@@ -508,7 +658,7 @@ function SlotCard({
             >
               {slot.title}
             </span>
-            <StatusPill action={action} position={waitlistPosition} />
+            <StatusPill action={action} position={waitlistPosition} isPast={isPast} />
           </div>
           <div className="flex flex-wrap gap-x-5 gap-y-1 text-xs font-medium text-foreground/50 uppercase tracking-widest">
             <span className="flex items-center gap-1.5"><Calendar className="h-3 w-3" />{fmt(starts)}</span>
@@ -517,27 +667,37 @@ function SlotCard({
           </div>
           <div className="h-1 w-full bg-foreground/10">
             <div
-              className={`h-full transition-all ${fillPct >= 100 ? "bg-yellow-400" : "bg-green-500"}`}
+              className={`h-full transition-all ${isPast ? "bg-foreground/20" : fillPct >= 100 ? "bg-yellow-400" : "bg-green-500"}`}
               style={{ width: `${fillPct}%` }}
             />
           </div>
         </div>
         <div className="shrink-0">
-          <ActionButton
-            action={action}
-            loading={loading}
-            onBook={onBook}
-            onJoinWaitlist={onJoinWaitlist}
-            onCancelBooking={onCancelBooking}
-            onLeaveWaitlist={onLeaveWaitlist}
-          />
+          {!isPast && (
+            <ActionButton
+              action={action}
+              loading={loading}
+              onBook={onBook}
+              onJoinWaitlist={onJoinWaitlist}
+              onCancelBooking={onCancelBooking}
+              onLeaveWaitlist={onLeaveWaitlist}
+            />
+          )}
         </div>
       </div>
     </div>
   );
 }
 
-function StatusPill({ action, position }: { action: SlotAction; position?: number }) {
+function StatusPill({ action, position, isPast }: { action: SlotAction; position?: number, isPast?: boolean }) {
+  if (isPast) {
+    return (
+       <span className="flex items-center gap-1 border text-[10px] font-black uppercase tracking-widest px-2 py-0.5 border-foreground/20 text-foreground/40">
+        ENDED
+      </span>
+    )
+  }
+
   const configs: Record<SlotAction, { label: string; icon: React.ReactNode; cls: string }> = {
     booked:        { label: "Booked",                              icon: <CheckCircle2 className="h-3 w-3" />, cls: "border-green-500/40 text-green-500" },
     waitlisted:    { label: position ? `Queue #${position}` : "On Waitlist", icon: <Hourglass className="h-3 w-3" />,    cls: "border-yellow-400/40 text-yellow-400" },

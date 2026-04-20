@@ -44,6 +44,8 @@ interface ConfirmState {
   title: string;
 }
 
+type TabMode = "active" | "history";
+
 export function DashboardPage() {
   const { profile, signOut } = useAuthStore();
 
@@ -53,6 +55,7 @@ export function DashboardPage() {
   const [loadingSlots, setLoadingSlots] = useState(true);
   const [formOpen, setFormOpen]     = useState(false);
   const [confirmCancel, setConfirmCancel] = useState<ConfirmState | null>(null);
+  const [activeTab, setActiveTab] = useState<TabMode>("active");
 
   const businessIdRef = useRef<string | null>(null);
   businessIdRef.current = businessId;
@@ -175,10 +178,18 @@ export function DashboardPage() {
   };
 
   const now = new Date().toISOString().slice(0, 16);
+  const currentTime = new Date().getTime();
+
+  // Filter slots into active and past
+  const activeSlots = slots.filter((s) => new Date(s.ends_at).getTime() >= currentTime);
+  const pastSlots = slots.filter((s) => new Date(s.ends_at).getTime() < currentTime);
+
+  const displayedSlots = activeTab === "active" ? activeSlots : pastSlots;
+
   const stats = {
     total:     slots.length,
-    open:      slots.filter((s) => s.status === "available").length,
-    full:      slots.filter((s) => s.status === "booked").length,
+    open:      activeSlots.filter((s) => s.status === "available").length,
+    full:      activeSlots.filter((s) => s.status === "booked").length,
     cancelled: slots.filter((s) => s.status === "cancelled").length,
   };
 
@@ -267,8 +278,8 @@ export function DashboardPage() {
       <main className="mx-auto max-w-5xl px-6 py-10 flex flex-col gap-10">
         <div className="grid grid-cols-2 sm:grid-cols-4 border-2 border-foreground divide-x-2 divide-foreground">
           <StatCell label="Total Slots" value={stats.total} />
-          <StatCell label="Open"      value={stats.open}      accent="text-green-500" />
-          <StatCell label="Full"      value={stats.full}      accent="text-yellow-400" />
+          <StatCell label="Active Open"      value={stats.open}      accent="text-green-500" />
+          <StatCell label="Active Full"      value={stats.full}      accent="text-yellow-400" />
           <StatCell label="Cancelled" value={stats.cancelled} accent="text-foreground/40" />
         </div>
 
@@ -350,16 +361,41 @@ export function DashboardPage() {
         </section>
 
         <section className="flex flex-col gap-4">
-          <div className="flex items-baseline justify-between">
-            <h2
-              className="text-xl font-black uppercase tracking-widest"
-              style={{ fontFamily: "'Syne', sans-serif" }}
-            >
-              Active Slots
-            </h2>
-            <span className="text-xs text-foreground/40 uppercase tracking-widest font-bold">
-              {slots.length} total
-            </span>
+          <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 border-b-4 border-foreground pb-4">
+             <div className="flex items-baseline gap-4">
+              <h2
+                className="text-2xl font-black uppercase tracking-widest leading-none"
+                style={{ fontFamily: "'Syne', sans-serif" }}
+              >
+                Slots
+              </h2>
+              <span className="text-xs text-foreground/40 uppercase tracking-widest font-bold">
+                {displayedSlots.length} items
+              </span>
+            </div>
+            
+            <div className="flex bg-foreground p-1 w-full sm:w-auto">
+              <button
+                onClick={() => setActiveTab("active")}
+                className={`flex-1 sm:w-32 py-2 text-xs font-black uppercase tracking-widest transition-colors ${
+                  activeTab === "active"
+                    ? "bg-background text-foreground"
+                    : "text-background hover:bg-background/20"
+                }`}
+              >
+                Active
+              </button>
+              <button
+                onClick={() => setActiveTab("history")}
+                className={`flex-1 sm:w-32 py-2 text-xs font-black uppercase tracking-widest transition-colors ${
+                  activeTab === "history"
+                    ? "bg-background text-foreground"
+                    : "text-background hover:bg-background/20"
+                }`}
+              >
+                History
+              </button>
+            </div>
           </div>
 
           {fetchError && <ErrorBlock message={fetchError} />}
@@ -370,18 +406,19 @@ export function DashboardPage() {
               <SlotSkeleton />
               <SlotSkeleton />
             </div>
-          ) : slots.length === 0 && !fetchError ? (
+          ) : displayedSlots.length === 0 && !fetchError ? (
             <div className="border-2 border-dashed border-foreground/30 px-6 py-12 text-center">
               <p className="text-sm font-bold uppercase tracking-widest text-foreground/30">
-                No slots yet — create one above
+                No slots found in this category
               </p>
             </div>
           ) : (
             <div className="flex flex-col gap-3">
-              {slots.map((slot) => (
+              {displayedSlots.map((slot) => (
                 <SlotCard
                   key={slot.id}
                   slot={slot}
+                  isPast={activeTab === "history"}
                   onCancel={() => confirmAndCancel(slot)}
                   onRestore={handleRestore}
                 />
@@ -472,10 +509,12 @@ function ErrorBlock({ message }: { message: string }) {
 
 function SlotCard({
   slot,
+  isPast,
   onCancel,
   onRestore,
 }: {
   slot: Slot;
+  isPast: boolean;
   onCancel: () => void;
   onRestore: (id: string) => void;
 }) {
@@ -492,7 +531,7 @@ function SlotCard({
     });
 
   return (
-    <div className={`border-2 border-foreground ${STATUS_STYLES[slot.status]} bg-background`}>
+    <div className={`border-2 border-foreground ${isPast ? "border-l-4 border-l-foreground/20 opacity-70" : STATUS_STYLES[slot.status]} bg-background`}>
       <div className="px-5 py-4 flex flex-col sm:flex-row sm:items-center gap-4">
         <div className="flex-1 flex flex-col gap-2">
           <div className="flex items-center gap-3 flex-wrap">
@@ -503,7 +542,7 @@ function SlotCard({
               {slot.title}
             </span>
             <span className="text-[10px] font-black uppercase tracking-widest border border-foreground/30 px-2 py-0.5 text-foreground/50">
-              {STATUS_LABEL[slot.status]}
+              {isPast ? "ENDED" : STATUS_LABEL[slot.status]}
             </span>
           </div>
           <div className="flex flex-wrap gap-x-5 gap-y-1 text-xs font-medium text-foreground/50 uppercase tracking-widest">
@@ -520,7 +559,8 @@ function SlotCard({
           <div className="h-1.5 w-full bg-foreground/10 mt-1">
             <div
               className={`h-full transition-all ${
-                slot.status === "cancelled"
+                 isPast ? "bg-foreground/20"
+                : slot.status === "cancelled"
                   ? "bg-foreground/20"
                   : fillPct >= 100
                   ? "bg-yellow-400"
@@ -532,22 +572,24 @@ function SlotCard({
         </div>
 
         <div className="flex gap-2 shrink-0">
-          {slot.status !== "cancelled" ? (
-            <button
-              onClick={onCancel}
-              className="flex items-center gap-1.5 border-2 border-foreground px-3 py-2 text-xs font-bold uppercase tracking-widest hover:bg-destructive hover:border-destructive hover:text-destructive-foreground transition-colors"
-            >
-              <XSquare className="h-3.5 w-3.5" />
-              Cancel
-            </button>
-          ) : (
-            <button
-              onClick={() => onRestore(slot.id)}
-              className="flex items-center gap-1.5 border-2 border-foreground px-3 py-2 text-xs font-bold uppercase tracking-widest hover:bg-green-500 hover:border-green-500 hover:text-background transition-colors"
-            >
-              <CheckSquare className="h-3.5 w-3.5" />
-              Restore
-            </button>
+          {!isPast && (
+             slot.status !== "cancelled" ? (
+              <button
+                onClick={onCancel}
+                className="flex items-center gap-1.5 border-2 border-foreground px-3 py-2 text-xs font-bold uppercase tracking-widest hover:bg-destructive hover:border-destructive hover:text-destructive-foreground transition-colors"
+              >
+                <XSquare className="h-3.5 w-3.5" />
+                Cancel
+              </button>
+            ) : (
+              <button
+                onClick={() => onRestore(slot.id)}
+                className="flex items-center gap-1.5 border-2 border-foreground px-3 py-2 text-xs font-bold uppercase tracking-widest hover:bg-green-500 hover:border-green-500 hover:text-background transition-colors"
+              >
+                <CheckSquare className="h-3.5 w-3.5" />
+                Restore
+              </button>
+            )
           )}
         </div>
       </div>

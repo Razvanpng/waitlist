@@ -63,6 +63,7 @@ export interface Database {
           id: string
           role: string
           updated_at: string
+          phone: string | null
         }
         Insert: {
           avatar_url?: string | null
@@ -72,6 +73,7 @@ export interface Database {
           id?: string
           role?: string
           updated_at?: string
+          phone?: string | null
         }
         Update: {
           avatar_url?: string | null
@@ -81,6 +83,7 @@ export interface Database {
           id?: string
           role?: string
           updated_at?: string
+          phone?: string | null
         }
         Relationships: []
       }
