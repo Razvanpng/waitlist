@@ -5,7 +5,7 @@ import { RequireAuth } from "@/features/auth/RequireAuth";
 import { LoginPage } from "@/pages/auth/LoginPage";
 import { RegisterPage } from "@/pages/auth/RegisterPage";
 import { DashboardPage } from "@/pages/admin/DashboardPage";
-import { ClientDashboardPage } from "@/pages/client/ClientDashboardPage";
+import { ClientDashboardPage } from "@/pages/client/DashboardPage";
 import { NotFoundPage } from "@/pages/NotFoundPage";
 
 export function AppRoutes() {
