@@ -2,15 +2,15 @@ import { useEffect, useState, useCallback, useRef } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { toast, Toaster } from "sonner";
-import { Loader2, LogOut, Plus } from "lucide-react";
+import { Loader2, LogOut, Plus, Zap, UserCircle } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { useAuthStore } from "@/store/authSlice";
 
-// Importăm noile noastre componente
-import { StatCell, SlotSkeleton, FormField, ErrorBlock } from "@/components/ui/DashboardUI";
+import { StatCell, SlotSkeleton, ErrorBlock, FormField } from "@/components/ui/DashboardUI";
+import { ProfileSettingsModal } from "@/components/ui/ProfileSettingsModal";
 import { 
   Slot, slotSchema, SlotFormValues, ConfirmState, ClientsModalTarget,
-  EditSlotModal, ClientsModal, CancelConfirmModal, SlotCard 
+  EditSlotModal, ClientsModal, CancelConfirmModal, SlotCard, BulkGeneratorModal 
 } from "./components/AdminComponents";
 
 type TabMode = "active" | "history";
@@ -18,7 +18,6 @@ type TabMode = "active" | "history";
 export function DashboardPage() {
   const { profile, signOut } = useAuthStore();
 
-  // State-uri
   const [slots, setSlots]           = useState<Slot[]>([]);
   const [businessId, setBusinessId] = useState<string | null>(null);
   const [fetchError, setFetchError] = useState<string | null>(null);
@@ -26,10 +25,11 @@ export function DashboardPage() {
   const [formOpen, setFormOpen]         = useState(false);
   const [activeTab, setActiveTab]       = useState<TabMode>("active");
 
-  // State-uri Modale
   const [confirmCancel, setConfirmCancel] = useState<ConfirmState | null>(null);
   const [clientsTarget, setClientsTarget] = useState<ClientsModalTarget | null>(null);
   const [editTarget, setEditTarget]       = useState<Slot | null>(null);
+  const [showBulkGenerator, setShowBulkGenerator] = useState(false);
+  const [showProfileSettings, setShowProfileSettings] = useState(false);
 
   const businessIdRef = useRef<string | null>(null);
   businessIdRef.current = businessId;
@@ -108,9 +108,11 @@ export function DashboardPage() {
     <div className="min-h-screen bg-background text-foreground font-sans">
       <Toaster position="bottom-right" toastOptions={{ className: "border-2 border-foreground rounded-none shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] font-bold uppercase tracking-widest" }} />
 
+      {showProfileSettings && <ProfileSettingsModal profile={profile} onClose={() => setShowProfileSettings(false)} />}
       {confirmCancel && <CancelConfirmModal title={confirmCancel.title} onConfirm={executeCancel} onCancel={() => setConfirmCancel(null)} />}
       {editTarget && <EditSlotModal slot={editTarget} onClose={() => setEditTarget(null)} onSaved={() => businessId && loadSlots(businessId)} />}
       {clientsTarget && <ClientsModal target={clientsTarget} onClose={() => setClientsTarget(null)} />}
+      {showBulkGenerator && businessId && <BulkGeneratorModal businessId={businessId} onClose={() => setShowBulkGenerator(false)} onSaved={() => loadSlots(businessId)} />}
 
       <header className="border-b-4 border-foreground px-6 py-5 flex items-center justify-between">
         <div className="flex flex-col gap-0.5">
@@ -118,7 +120,13 @@ export function DashboardPage() {
           <h1 className="text-2xl font-black uppercase tracking-tight leading-none" style={{ fontFamily: "'Syne', sans-serif" }}>Admin Protocol</h1>
         </div>
         <div className="flex items-center gap-4">
-          <span className="hidden sm:block text-xs font-medium text-foreground/50 uppercase tracking-widest">{profile?.full_name ?? profile?.email}</span>
+          <button
+            onClick={() => setShowProfileSettings(true)}
+            className="hidden sm:flex items-center gap-2 text-xs font-bold text-foreground/50 hover:text-foreground uppercase tracking-widest transition-colors"
+          >
+            <UserCircle className="h-4 w-4" />
+            {profile?.full_name ?? profile?.email}
+          </button>
           <button onClick={() => signOut()} className="flex items-center gap-2 border-2 border-foreground px-4 py-2 text-xs font-bold uppercase tracking-widest hover:bg-foreground hover:text-background transition-colors">
             <LogOut className="h-3.5 w-3.5" /> Exit
           </button>
@@ -133,28 +141,33 @@ export function DashboardPage() {
           <StatCell label="Cancelled" value={stats.cancelled} accent="text-foreground/40" />
         </div>
 
-        <section className="border-2 border-foreground">
-          <button onClick={() => setFormOpen((p) => !p)} className="w-full flex items-center justify-between px-6 py-5 bg-foreground text-background hover:bg-primary hover:text-foreground transition-colors">
-            <span className="text-lg font-black uppercase tracking-widest" style={{ fontFamily: "'Syne', sans-serif" }}>{formOpen ? "— Close Form" : "+ Create New Slot"}</span>
-            <Plus className={`h-5 w-5 transition-transform ${formOpen ? "rotate-45" : ""}`} />
+        <div className="flex flex-col sm:flex-row gap-3">
+          <div className="flex-1 border-2 border-foreground">
+            <button onClick={() => setFormOpen((p) => !p)} className="w-full flex items-center justify-between px-6 py-5 bg-foreground text-background hover:bg-primary hover:text-foreground transition-colors">
+              <span className="text-lg font-black uppercase tracking-widest" style={{ fontFamily: "'Syne', sans-serif" }}>{formOpen ? "— Close Form" : "+ Create New Slot"}</span>
+              <Plus className={`h-5 w-5 transition-transform ${formOpen ? "rotate-45" : ""}`} />
+            </button>
+            {formOpen && (
+              <form onSubmit={handleSubmit(onCreateSubmit)} noValidate className="px-6 py-7 flex flex-col gap-7 border-t-2 border-foreground">
+                <div className="grid sm:grid-cols-2 gap-7">
+                  <FormField label="Slot Title" error={errors.title?.message}><input {...register("title")} type="text" placeholder="e.g. Morning Consultation" className="border-b-4 border-foreground bg-transparent py-3 text-xl outline-none focus:bg-foreground/5 w-full" /></FormField>
+                  <FormField label="Capacity" error={errors.capacity?.message}><input {...register("capacity")} type="number" min={1} placeholder="1" className="border-b-4 border-foreground bg-transparent py-3 text-xl outline-none focus:bg-foreground/5 w-full" /></FormField>
+                  <FormField label="Starts At" error={errors.starts_at?.message}><input {...register("starts_at")} type="datetime-local" min={now} className="border-b-4 border-foreground bg-transparent py-3 text-xl outline-none focus:bg-foreground/5 w-full" /></FormField>
+                  <FormField label="Ends At" error={errors.ends_at?.message}><input {...register("ends_at")} type="datetime-local" min={now} className="border-b-4 border-foreground bg-transparent py-3 text-xl outline-none focus:bg-foreground/5 w-full" /></FormField>
+                </div>
+                <div className="flex gap-3">
+                  <button type="submit" disabled={isSubmitting} className="flex items-center gap-3 bg-foreground py-5 px-8 text-lg font-bold uppercase tracking-widest text-background transition-all hover:bg-primary hover:text-foreground disabled:opacity-40 disabled:cursor-not-allowed">
+                    {isSubmitting && <Loader2 className="h-5 w-5 animate-spin" />}{isSubmitting ? "Saving..." : "Confirm Slot"}
+                  </button>
+                  <button type="button" onClick={() => { reset(); setFormOpen(false); }} className="border-2 border-foreground py-5 px-6 text-sm font-bold uppercase tracking-widest hover:bg-foreground hover:text-background transition-colors">Discard</button>
+                </div>
+              </form>
+            )}
+          </div>
+          <button onClick={() => setShowBulkGenerator(true)} disabled={!businessId} className="flex items-center justify-center gap-2 border-2 border-foreground px-6 py-5 text-sm font-black uppercase tracking-widest hover:bg-foreground hover:text-background transition-colors disabled:opacity-30 disabled:cursor-not-allowed sm:self-start">
+            <Zap className="h-4 w-4" /> Bulk Generate
           </button>
-          {formOpen && (
-            <form onSubmit={handleSubmit(onCreateSubmit)} noValidate className="px-6 py-7 flex flex-col gap-7 border-t-2 border-foreground">
-              <div className="grid sm:grid-cols-2 gap-7">
-                <FormField label="Slot Title" error={errors.title?.message}><input {...register("title")} type="text" placeholder="e.g. Morning Consultation" className="border-b-4 border-foreground bg-transparent py-3 text-xl outline-none focus:bg-foreground/5 w-full" /></FormField>
-                <FormField label="Capacity" error={errors.capacity?.message}><input {...register("capacity")} type="number" min={1} placeholder="1" className="border-b-4 border-foreground bg-transparent py-3 text-xl outline-none focus:bg-foreground/5 w-full" /></FormField>
-                <FormField label="Starts At" error={errors.starts_at?.message}><input {...register("starts_at")} type="datetime-local" min={now} className="border-b-4 border-foreground bg-transparent py-3 text-xl outline-none focus:bg-foreground/5 w-full" /></FormField>
-                <FormField label="Ends At" error={errors.ends_at?.message}><input {...register("ends_at")} type="datetime-local" min={now} className="border-b-4 border-foreground bg-transparent py-3 text-xl outline-none focus:bg-foreground/5 w-full" /></FormField>
-              </div>
-              <div className="flex gap-3">
-                <button type="submit" disabled={isSubmitting} className="flex items-center gap-3 bg-foreground py-5 px-8 text-lg font-bold uppercase tracking-widest text-background transition-all hover:bg-primary hover:text-foreground disabled:opacity-40 disabled:cursor-not-allowed">
-                  {isSubmitting && <Loader2 className="h-5 w-5 animate-spin" />}{isSubmitting ? "Saving..." : "Confirm Slot"}
-                </button>
-                <button type="button" onClick={() => { reset(); setFormOpen(false); }} className="border-2 border-foreground py-5 px-6 text-sm font-bold uppercase tracking-widest hover:bg-foreground hover:text-background transition-colors">Discard</button>
-              </div>
-            </form>
-          )}
-        </section>
+        </div>
 
         <section className="flex flex-col gap-4">
           <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 border-b-4 border-foreground pb-4">
