@@ -461,45 +461,45 @@ export function BulkGeneratorModal({ businessId, onClose, onSaved }: { businessI
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-sm px-4 overflow-y-auto pt-10">
       <div className="w-full max-w-2xl border-4 border-foreground bg-background shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] flex flex-col my-auto max-h-[90vh]">
-        <div className="border-b-2 border-foreground px-6 py-5 flex items-start justify-between gap-4 shrink-0">
+        <div className="border-b-4 border-foreground px-6 py-5 flex items-start justify-between gap-4 shrink-0">
           <div>
-            <p className="text-[10px] font-black uppercase tracking-[0.25em] text-foreground/40" style={{ fontFamily: "'Syne', sans-serif" }}>Smart Schedule Generator</p>
-            <h2 className="mt-0.5 text-xl font-black uppercase tracking-tight leading-tight" style={{ fontFamily: "'Syne', sans-serif" }}>Bulk Generate Slots</h2>
+            <p className="text-[10px] font-black uppercase tracking-[0.3em] text-foreground/50" style={{ fontFamily: "'Syne', sans-serif" }}>Smart Schedule Generator</p>
+            <h2 className="mt-1 text-2xl font-black uppercase tracking-tight leading-tight" style={{ fontFamily: "'Syne', sans-serif" }}>Bulk Generate Slots</h2>
           </div>
-          <button type="button" onClick={onClose} className="border-2 border-foreground p-1.5 hover:bg-foreground hover:text-background transition-colors shrink-0"><X className="h-4 w-4" /></button>
+          <button type="button" onClick={onClose} className="border-2 border-foreground p-2 hover:bg-destructive hover:text-destructive-foreground hover:border-destructive transition-colors shrink-0"><X className="h-5 w-5" /></button>
         </div>
 
-        <div className="overflow-y-auto flex-1">
-          <form id="bulk-gen-form" onSubmit={handleSubmit(onSubmit)} noValidate className="px-6 py-7 flex flex-col gap-8">
-            <div className="flex flex-col gap-3">
+        <div className="overflow-y-auto flex-1 bg-foreground/5">
+          <form id="bulk-gen-form" onSubmit={handleSubmit(onSubmit)} noValidate className="px-6 py-8 flex flex-col gap-10">
+            <div className="flex flex-col gap-4">
               <SectionLabel>Slot Identity</SectionLabel>
               <div className="grid sm:grid-cols-2 gap-7">
-                <FormField label="Title (applied to all slots)" error={errors.title?.message}><input {...register("title")} type="text" placeholder="e.g. Consultation" className="border-b-4 border-foreground bg-transparent py-3 text-xl outline-none focus:bg-foreground/5 w-full" /></FormField>
-                <FormField label="Capacity per slot" error={errors.capacity?.message}><input {...register("capacity")} type="number" min={1} className="border-b-4 border-foreground bg-transparent py-3 text-xl outline-none focus:bg-foreground/5 w-full" /></FormField>
+                <FormField label="Title (applied to all slots)" error={errors.title?.message}><input {...register("title")} type="text" placeholder="e.g. Consultation" className="border-b-4 border-foreground bg-background py-3 px-2 text-xl outline-none focus:bg-white w-full" /></FormField>
+                <FormField label="Capacity per slot" error={errors.capacity?.message}><input {...register("capacity")} type="number" min={1} className="border-b-4 border-foreground bg-background py-3 px-2 text-xl outline-none focus:bg-white w-full" /></FormField>
               </div>
             </div>
-            <div className="flex flex-col gap-3">
+            <div className="flex flex-col gap-4">
               <SectionLabel>Date Range</SectionLabel>
               <div className="grid sm:grid-cols-2 gap-7">
-                <FormField label="Start Date" error={errors.startDate?.message}><input {...register("startDate")} type="date" min={today} className="border-b-4 border-foreground bg-transparent py-3 text-xl outline-none focus:bg-foreground/5 w-full" /></FormField>
-                <FormField label="End Date" error={errors.endDate?.message}><input {...register("endDate")} type="date" min={today} className="border-b-4 border-foreground bg-transparent py-3 text-xl outline-none focus:bg-foreground/5 w-full" /></FormField>
+                <FormField label="Start Date" error={errors.startDate?.message}><input {...register("startDate")} type="date" min={today} className="border-b-4 border-foreground bg-background py-3 px-2 text-xl outline-none focus:bg-white w-full" /></FormField>
+                <FormField label="End Date" error={errors.endDate?.message}><input {...register("endDate")} type="date" min={today} className="border-b-4 border-foreground bg-background py-3 px-2 text-xl outline-none focus:bg-white w-full" /></FormField>
               </div>
             </div>
-            <div className="flex flex-col gap-3">
+            <div className="flex flex-col gap-4">
               <SectionLabel>Daily Time Window</SectionLabel>
               <div className="grid sm:grid-cols-2 gap-7">
-                <FormField label="Day Starts At" error={errors.startTime?.message}><input {...register("startTime")} type="time" className="border-b-4 border-foreground bg-transparent py-3 text-xl outline-none focus:bg-foreground/5 w-full" /></FormField>
-                <FormField label="Day Ends At" error={errors.endTime?.message}><input {...register("endTime")} type="time" className="border-b-4 border-foreground bg-transparent py-3 text-xl outline-none focus:bg-foreground/5 w-full" /></FormField>
+                <FormField label="Day Starts At" error={errors.startTime?.message}><input {...register("startTime")} type="time" className="border-b-4 border-foreground bg-background py-3 px-2 text-xl outline-none focus:bg-white w-full" /></FormField>
+                <FormField label="Day Ends At" error={errors.endTime?.message}><input {...register("endTime")} type="time" className="border-b-4 border-foreground bg-background py-3 px-2 text-xl outline-none focus:bg-white w-full" /></FormField>
               </div>
             </div>
-            <div className="flex flex-col gap-3">
+            <div className="flex flex-col gap-4">
               <SectionLabel>Slot & Break Duration</SectionLabel>
               <div className="grid sm:grid-cols-2 gap-7">
-                <FormField label="Slot Duration (minutes)" error={errors.slotDuration?.message}><input {...register("slotDuration")} type="number" min={1} className="border-b-4 border-foreground bg-transparent py-3 text-xl outline-none focus:bg-foreground/5 w-full" /></FormField>
-                <FormField label="Break Between Slots (minutes)" error={errors.breakDuration?.message}><input {...register("breakDuration")} type="number" min={0} className="border-b-4 border-foreground bg-transparent py-3 text-xl outline-none focus:bg-foreground/5 w-full" /></FormField>
+                <FormField label="Slot Duration (minutes)" error={errors.slotDuration?.message}><input {...register("slotDuration")} type="number" min={1} className="border-b-4 border-foreground bg-background py-3 px-2 text-xl outline-none focus:bg-white w-full" /></FormField>
+                <FormField label="Break Between Slots (minutes)" error={errors.breakDuration?.message}><input {...register("breakDuration")} type="number" min={0} className="border-b-4 border-foreground bg-background py-3 px-2 text-xl outline-none focus:bg-white w-full" /></FormField>
               </div>
             </div>
-            <div className="flex flex-col gap-3">
+            <div className="flex flex-col gap-4">
               <SectionLabel>Active Days</SectionLabel>
               {errors.daysOfWeek && <p className="text-xs font-bold uppercase tracking-wider text-destructive">↳ {errors.daysOfWeek.message}</p>}
               <Controller name="daysOfWeek" control={control} render={({ field }) => (
@@ -508,7 +508,7 @@ export function BulkGeneratorModal({ businessId, onClose, onSaved }: { businessI
                       const active = field.value?.includes(day.value);
                       return (
                         <button key={day.value} type="button" onClick={() => field.onChange(active ? field.value.filter((v) => v !== day.value) : [...(field.value ?? []), day.value])}
-                          className={`border-2 px-4 py-2.5 text-xs font-black uppercase tracking-widest transition-colors ${active ? "border-foreground bg-foreground text-background" : "border-foreground/30 text-foreground/40 hover:border-foreground hover:text-foreground"}`}>
+                          className={`border-4 px-5 py-3 text-sm font-black uppercase tracking-widest transition-transform hover:-translate-y-0.5 ${active ? "border-foreground bg-foreground text-background shadow-[4px_4px_0px_0px_rgba(0,0,0,1)]" : "border-foreground/30 bg-background text-foreground/50 hover:border-foreground hover:text-foreground"}`}>
                           {day.label}
                         </button>
                       );
@@ -517,26 +517,37 @@ export function BulkGeneratorModal({ businessId, onClose, onSaved }: { businessI
                 )}
               />
             </div>
-            <div className="border-2 border-foreground/20 px-5 py-4 flex items-center justify-between gap-4">
-              <div className="flex flex-col gap-0.5">
-                <span className="text-[10px] font-black uppercase tracking-[0.2em] text-foreground/40">Estimated Slots</span>
-                <span className={`text-3xl font-black leading-none ${previewCount > 0 ? "text-green-500" : "text-foreground/30"}`}>{previewCount}</span>
+            
+            {/* NOUL DESIGN PENTRU ESTIMATED SLOTS */}
+            <div className={`border-4 border-foreground px-6 py-6 flex items-center justify-between ${previewCount > 0 ? 'bg-green-400/20' : 'bg-background'}`}>
+              <div className="flex flex-col gap-1">
+                <span className="text-[10px] font-black uppercase tracking-[0.3em] text-foreground/50">
+                  Estimated Generation
+                </span>
+                <div className="flex items-baseline gap-2">
+                  <span className={`text-6xl font-black leading-none tracking-tighter ${previewCount > 0 ? "text-green-600" : "text-foreground/30"}`}>
+                    {previewCount}
+                  </span>
+                  <span className="text-base font-black uppercase tracking-widest text-foreground/50">
+                    Slots
+                  </span>
+                </div>
               </div>
-              <p className="text-xs font-medium text-foreground/40 max-w-xs text-right leading-relaxed">based on current inputs — final count confirmed on submit</p>
+              <p className="text-[10px] font-bold uppercase tracking-[0.15em] text-foreground/40 max-w-[160px] text-right leading-relaxed">
+                Final count confirmed on submit
+              </p>
             </div>
+            {/* END NOUL DESIGN */}
+
           </form>
         </div>
-        <div className="border-t-2 border-foreground px-6 py-4 flex gap-3 shrink-0">
-          <button type="submit" form="bulk-gen-form" disabled={isSubmitting || previewCount === 0} className="flex flex-1 items-center justify-center gap-3 bg-foreground py-4 text-sm font-black uppercase tracking-widest text-background hover:bg-primary hover:text-foreground transition-colors disabled:opacity-40 disabled:cursor-not-allowed">
-            {isSubmitting ? <><Loader2 className="h-4 w-4 animate-spin" />Generating…</> : <><Zap className="h-4 w-4" />Generate {previewCount > 0 ? `${previewCount} Slots` : "Slots"}</>}
+        <div className="border-t-4 border-foreground px-6 py-5 flex gap-4 shrink-0 bg-background">
+          <button type="submit" form="bulk-gen-form" disabled={isSubmitting || previewCount === 0} className="flex flex-1 items-center justify-center gap-3 bg-foreground py-5 text-base font-black uppercase tracking-widest text-background hover:bg-primary hover:text-foreground transition-colors disabled:opacity-40 disabled:cursor-not-allowed">
+            {isSubmitting ? <><Loader2 className="h-5 w-5 animate-spin" />Generating…</> : <><Zap className="h-5 w-5" />Generate {previewCount > 0 ? `${previewCount} Slots` : "Slots"}</>}
           </button>
-          <button type="button" onClick={onClose} className="border-2 border-foreground py-4 px-5 text-sm font-black uppercase tracking-widest hover:bg-foreground hover:text-background transition-colors">Cancel</button>
+          <button type="button" onClick={onClose} className="border-4 border-foreground py-5 px-8 text-base font-black uppercase tracking-widest hover:bg-foreground hover:text-background transition-colors">Cancel</button>
         </div>
       </div>
     </div>
   );
-}
-
-function SectionLabel({ children }: { children: React.ReactNode }) {
-  return <span className="text-[10px] font-black uppercase tracking-[0.3em] text-foreground/30 border-b border-foreground/10 pb-1" style={{ fontFamily: "'Syne', sans-serif" }}>{children}</span>;
 }
