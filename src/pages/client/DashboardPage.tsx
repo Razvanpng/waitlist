@@ -1,10 +1,10 @@
 import { useEffect, useState, useCallback, useRef } from "react";
 import { toast, Toaster } from "sonner";
-import { Loader2, LogOut, Building2, ChevronDown, UserCircle } from "lucide-react";
+import { Loader2, LogOut, Building2, ChevronDown, UserCircle, QrCode } from "lucide-react";
 import { supabase } from "@/lib/supabase";
 import { useAuthStore } from "@/store/authSlice";
 
-import { StatCell, SlotSkeleton, ErrorBlock } from "@/components/ui/DashboardUI";
+import { SlotSkeleton, ErrorBlock } from "@/components/ui/DashboardUI";
 import { ProfileSettingsModal } from "@/components/ui/ProfileSettingsModal";
 import { 
   Slot, SlotAction, ConfirmState, PhoneModal, ActionConfirmModal, ClientSlotCard 
@@ -89,9 +89,9 @@ export function ClientDashboardPage() {
 
   useEffect(() => {
     const channel = supabase.channel("client-dashboard")
-      .on("postgres_changes", { event: "*", schema: "public", table: "slots" }, () => selectedBizRef.current && loadSlots(selectedBizRef.current))
-      .on("postgres_changes", { event: "*", schema: "public", table: "bookings" }, () => profileIdRef.current && refresh())
-      .on("postgres_changes", { event: "*", schema: "public", table: "waitlist_entries" }, () => profileIdRef.current && refresh())
+      .on("postgres_changes", { event: "*", schema: "public", table: "slots" }, () => { if (selectedBizRef.current) loadSlots(selectedBizRef.current); })
+      .on("postgres_changes", { event: "*", schema: "public", table: "bookings" }, () => { if (profileIdRef.current) refresh(); })
+      .on("postgres_changes", { event: "*", schema: "public", table: "waitlist_entries" }, () => { if (profileIdRef.current) refresh(); })
       .subscribe();
     return () => { supabase.removeChannel(channel); };
   }, [loadSlots, refresh]);
@@ -111,37 +111,23 @@ export function ClientDashboardPage() {
     else { setLocalPhone(phoneNumber); setShowPhoneModal(false); toast.success("Phone saved"); if (pendingAction) { pendingAction(); setPendingAction(null); } }
   };
 
-  const handleBook = async (slotId: string, slotTitle: string) => {
+  const handleBook = async (slotId: string, title: string) => {
     if (!profile?.id) return;
     setActionLoading(slotId);
-    const { data, error } = await supabase.rpc("book_slot", {
-      p_slot_id:   slotId,
-      p_client_id: profile.id,
-    });
+    const { data, error } = await supabase.rpc("book_slot", { p_slot_id: slotId, p_client_id: profile.id });
     const res = data as any;
-    if (error || res?.success === false) {
-      toast.error(error?.message ?? res?.error ?? "booking failed");
-    } else {
-      toast.success(`"${slotTitle}" booked`);
-      await refresh();
-    }
+    if (error || res?.success === false) toast.error(error?.message || res?.error || "Booking failed");
+    else { toast.success(`"${title}" booked`); await refresh(); }
     setActionLoading(null);
   };
 
-  const handleJoinWaitlist = async (slotId: string, slotTitle: string) => {
+  const handleJoinWaitlist = async (slotId: string, title: string) => {
     if (!profile?.id) return;
     setActionLoading(slotId);
-    const { data, error } = await supabase.rpc("join_waitlist", {
-      p_slot_id:   slotId,
-      p_client_id: profile.id,
-    });
+    const { data, error } = await supabase.rpc("join_waitlist", { p_slot_id: slotId, p_client_id: profile.id });
     const res = data as any;
-    if (error || res?.success === false) {
-      toast.error(error?.message ?? res?.error ?? "could not join waitlist");
-    } else {
-      toast.success(`joined waitlist for "${slotTitle}"`);
-      await refresh();
-    }
+    if (error || res?.success === false) toast.error(error?.message || res?.error || "Waitlist failed");
+    else { toast.success(`Joined waitlist for "${title}"`); await refresh(); }
     setActionLoading(null);
   };
 
@@ -166,209 +152,123 @@ export function ClientDashboardPage() {
   const pastSlots = slots.filter((s) => new Date(s.ends_at).getTime() < currentTime);
   const displayedSlots = activeTab === "active" ? activeSlots : pastSlots;
 
-  const selectedBizName = businesses.find((b) => b.id === selectedBiz)?.name ?? "";
-
   return (
-    <div className="min-h-screen bg-background text-foreground font-sans flex flex-col lg:flex-row">
+    <div className="min-h-screen lg:h-screen w-full bg-background text-foreground font-sans p-3 sm:p-6 lg:p-8 box-border flex flex-col">
       <Toaster position="bottom-right" toastOptions={{ className: "border-2 border-foreground rounded-none shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] font-bold uppercase tracking-widest" }} />
 
+      {/* Modals */}
       {showProfileSettings && <ProfileSettingsModal profile={profile} onClose={() => setShowProfileSettings(false)} />}
       {showPhoneModal && <PhoneModal phoneNumber={phoneNumber} setPhoneNumber={setPhoneNumber} onSave={savePhoneAndContinue} onCancel={() => setShowPhoneModal(false)} isSaving={savingPhone} />}
-      
-      {confirmState && (
-        <ActionConfirmModal 
-          state={confirmState} 
-          onConfirm={confirmState.kind === "cancel_booking" ? executeCancelBooking : executeLeaveWaitlist} 
-          onCancel={() => setConfirmState(null)} 
-        />
-      )}
+      {confirmState && <ActionConfirmModal state={confirmState} onConfirm={confirmState.kind === "cancel_booking" ? executeCancelBooking : executeLeaveWaitlist} onCancel={() => setConfirmState(null)} />}
 
-      {/* ── LEFT SIDEBAR ── */}
-      <aside className="
-        lg:w-[380px] lg:shrink-0 lg:sticky lg:top-0 lg:h-screen lg:overflow-y-auto
-        lg:border-r-4 border-b-4 lg:border-b-0 border-foreground
-        flex flex-col
-      ">
-        <div className="p-6 border-b-2 border-foreground flex flex-col gap-6">
-          <div>
-            <span className="text-[10px] font-bold tracking-[0.3em] text-foreground/40 uppercase">
+      {/* Main Frame (Mondrian Container) */}
+      <div className="w-full flex-1 border-4 border-foreground flex flex-col lg:flex-row shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] bg-background lg:overflow-hidden">
+        
+        {/* ── LEFT COLUMN (GRID) ── */}
+        <aside className="lg:w-[420px] flex flex-col border-b-4 lg:border-b-0 lg:border-r-4 border-foreground shrink-0 bg-background z-10">
+          
+          {/* Brutalist Title Box */}
+          <div className="p-6 lg:p-8 border-b-4 border-foreground flex flex-col justify-end min-h-[220px] lg:min-h-[280px] bg-primary text-foreground relative overflow-hidden">
+            <div className="absolute top-0 right-0 p-4 opacity-20">
+              <QrCode className="w-32 h-32" />
+            </div>
+            <span className="text-[10px] font-black tracking-[0.4em] uppercase opacity-70 mb-auto relative z-10">
               Smart Waitlist
             </span>
-            <h1
-              className="text-3xl font-black uppercase tracking-tight leading-none mt-1"
-              style={{ fontFamily: "'Syne', sans-serif" }}
-            >
-              Client<br />Terminal
+            <h1 className="text-5xl lg:text-[4.5rem] font-black uppercase tracking-tighter leading-[0.85] relative z-10" style={{ fontFamily: "'Syne', sans-serif" }}>
+              Client<br/>Terminal
             </h1>
           </div>
 
-          <div className="flex flex-col gap-3">
-             <button
-              onClick={() => setShowProfileSettings(true)}
-              className="flex items-center gap-2 border-2 border-foreground px-3 py-3 text-xs font-bold uppercase tracking-widest hover:bg-foreground hover:text-background transition-colors justify-center"
-            >
-              <UserCircle className="h-4 w-4" />
-              {profile?.full_name ?? profile?.email}
+          {/* User Auth Box */}
+          <div className="border-b-4 border-foreground p-6 flex flex-col gap-4 bg-background">
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] font-black uppercase tracking-[0.25em] text-foreground/40">Active User</span>
+              <span className="text-sm font-black uppercase tracking-wider truncate text-right ml-4 text-foreground/80">{profile?.full_name ?? profile?.email}</span>
+            </div>
+            <div className="grid grid-cols-2 gap-3 mt-1">
+              <button onClick={() => setShowProfileSettings(true)} className="border-2 border-foreground py-3 flex items-center justify-center gap-2 text-xs font-black uppercase tracking-widest hover:bg-foreground hover:text-background transition-colors"><UserCircle className="w-4 h-4"/> Profile</button>
+              <button onClick={() => signOut()} className="border-2 border-foreground py-3 flex items-center justify-center gap-2 text-xs font-black uppercase tracking-widest hover:bg-destructive hover:text-destructive-foreground hover:border-destructive transition-colors"><LogOut className="w-4 h-4"/> Exit</button>
+            </div>
+          </div>
+
+          {/* Business Selector */}
+          <div className="border-b-4 border-foreground p-6 bg-foreground/5 flex flex-col gap-3">
+             <span className="text-[10px] font-black uppercase tracking-[0.3em] text-foreground/50">Target Business</span>
+             {loadingBiz ? (
+              <div className="flex items-center gap-2 py-2 text-foreground/40">
+                <Loader2 className="h-4 w-4 animate-spin" /> <span className="text-xs font-bold uppercase tracking-widest">Scanning…</span>
+              </div>
+            ) : (
+              <div className="relative">
+                <Building2 className="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-foreground/40" />
+                <select id="biz-select" value={selectedBiz} onChange={(e) => setSelectedBiz(e.target.value)} className="w-full appearance-none border-4 border-foreground bg-background pl-12 pr-8 py-3 text-lg font-black uppercase outline-none focus:ring-4 focus:ring-primary/50 cursor-pointer shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] hover:translate-x-[2px] hover:translate-y-[2px] hover:shadow-[2px_2px_0px_0px_rgba(0,0,0,1)] transition-all">
+                  {businesses.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
+                </select>
+                <ChevronDown className="pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 h-5 w-5 text-foreground/60" />
+              </div>
+            )}
+          </div>
+
+          {/* Telemetry Grid (Mondrian Stats) */}
+          <div className="flex-1 flex flex-col">
+            <div className="grid grid-cols-2 flex-1 min-h-[160px]">
+              <div className="border-r-4 border-b-4 lg:border-b-0 border-foreground p-6 flex flex-col justify-center items-center text-center bg-green-400/20">
+                <span className="text-[10px] font-black uppercase tracking-[0.2em] text-green-700/60 mb-1">Bookings</span>
+                <span className="text-5xl font-black text-green-600">{bookings.length}</span>
+              </div>
+              <div className="lg:border-b-0 border-b-4 border-foreground p-6 flex flex-col justify-center items-center text-center bg-yellow-400/20">
+                <span className="text-[10px] font-black uppercase tracking-[0.2em] text-yellow-700/60 mb-1">Waitlisted</span>
+                <span className="text-5xl font-black text-yellow-600">{waitlistEntries.length}</span>
+              </div>
+            </div>
+          </div>
+        </aside>
+
+        {/* ── RIGHT COLUMN (CONTENT) ── */}
+        <main className="flex-1 flex flex-col min-w-0 bg-background lg:overflow-hidden relative">
+          
+          {/* Top Action Bar (Mondrian Header) */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 border-b-4 border-foreground shrink-0 divide-y-4 sm:divide-y-0 sm:divide-x-4 border-foreground bg-background z-20 relative">
+            <button onClick={() => setActiveTab("active")} className={`p-6 lg:p-7 font-black uppercase tracking-widest text-sm transition-colors ${activeTab === 'active' ? 'bg-green-400/20 shadow-[inset_0_-4px_0_0_#22c55e] text-green-700' : 'text-foreground/50 hover:text-foreground hover:bg-foreground/5'}`}>
+              Available Slots
             </button>
-            <button
-              onClick={() => signOut()}
-              className="flex items-center justify-center gap-2 border-2 border-foreground px-3 py-3 text-xs font-bold uppercase tracking-widest hover:bg-destructive hover:text-destructive-foreground hover:border-destructive transition-colors"
-            >
-              <LogOut className="h-3.5 w-3.5" />
-              Exit
+            <button onClick={() => setActiveTab("history")} className={`p-6 lg:p-7 font-black uppercase tracking-widest text-sm transition-colors ${activeTab === 'history' ? 'bg-foreground/10 shadow-[inset_0_-4px_0_0_#000] text-foreground' : 'text-foreground/50 hover:text-foreground hover:bg-foreground/5'}`}>
+              History Log
             </button>
           </div>
-        </div>
 
-        <div className="p-6 border-b-2 border-foreground flex flex-col gap-3">
-          <span
-            className="text-[10px] font-black uppercase tracking-[0.3em] text-foreground/30"
-            style={{ fontFamily: "'Syne', sans-serif" }}
-          >
-            Business
-          </span>
+          {/* Scrollable Canvas */}
+          <div className="flex-1 overflow-y-auto bg-[#f4f4f0] p-4 sm:p-6 lg:p-10 relative">
+            {pageError && <ErrorBlock message={pageError} />}
 
-          {loadingBiz ? (
-            <div className="flex items-center gap-2 border-b-4 border-foreground py-3 text-foreground/40">
-              <Loader2 className="h-4 w-4 animate-spin" />
-              <span className="text-sm font-bold uppercase tracking-widest">Loading…</span>
-            </div>
-          ) : (
-            <div className="relative">
-              <Building2 className="pointer-events-none absolute left-0 top-1/2 -translate-y-1/2 h-5 w-5 text-foreground/40" />
-              <select
-                id="biz-select"
-                value={selectedBiz}
-                onChange={(e) => setSelectedBiz(e.target.value)}
-                className="w-full appearance-none border-b-4 border-foreground bg-transparent pl-7 pr-8 py-3 text-lg font-bold outline-none focus:bg-foreground/5 cursor-pointer"
-              >
-                {businesses.map((b) => (
-                  <option key={b.id} value={b.id}>{b.name}</option>
-                ))}
-              </select>
-              <ChevronDown className="pointer-events-none absolute right-0 top-1/2 -translate-y-1/2 h-5 w-5 text-foreground/50" />
-            </div>
-          )}
-        </div>
-
-        <div className="p-6 flex flex-col gap-3">
-          <span
-            className="text-[10px] font-black uppercase tracking-[0.3em] text-foreground/30"
-            style={{ fontFamily: "'Syne', sans-serif" }}
-          >
-            My Activity
-          </span>
-
-          <div className="grid grid-cols-2 border-2 border-foreground divide-x-2 divide-y-2 divide-foreground">
-            <StatCell label="Bookings"  value={bookings.length}        accent="text-green-500" />
-            <StatCell label="Waitlists" value={waitlistEntries.length} accent="text-yellow-400" />
-            <StatCell label="Available" value={slots.filter((s) => s.booked_count < s.capacity).length} />
-            <StatCell label="Full"      value={slots.filter((s) => s.status === "booked").length} accent="text-foreground/40" />
+            {!selectedBiz ? (
+              <div className="border-4 border-dashed border-foreground/20 px-6 py-20 text-center flex flex-col items-center justify-center h-full min-h-[300px]">
+                <span className="text-4xl mb-4 opacity-20">🏢</span>
+                <p className="text-sm font-black uppercase tracking-widest text-foreground/30">Connect to a business first</p>
+              </div>
+            ) : loadingSlots ? (
+              <div className="flex flex-col gap-4"><SlotSkeleton /><SlotSkeleton /><SlotSkeleton /></div>
+            ) : displayedSlots.length === 0 ? (
+              <div className="border-4 border-dashed border-foreground/20 px-6 py-20 text-center flex flex-col items-center justify-center h-full min-h-[300px]">
+                <span className="text-4xl mb-4 opacity-20">🕳️</span>
+                <p className="text-sm font-black uppercase tracking-widest text-foreground/30">No slots available in this sector</p>
+              </div>
+            ) : (
+              <div className="flex flex-col gap-4">
+                {displayedSlots.map((slot) => {
+                  const action  = resolveAction(slot, bookedSlotIds, waitlistedSlotIds);
+                  const loading = actionLoading === slot.id;
+                  const entry   = waitlistEntries.find((w) => w.slot_id === slot.id);
+                  return (
+                    <ClientSlotCard key={slot.id} slot={slot} action={action} loading={loading} isPast={activeTab === "history"} waitlistPosition={entry?.position} onBook={() => requirePhone(() => handleBook(slot.id, slot.title))} onJoinWaitlist={() => requirePhone(() => handleJoinWaitlist(slot.id, slot.title))} onCancelBooking={() => setConfirmState({ slotId: slot.id, title: slot.title, kind: "cancel_booking" })} onLeaveWaitlist={() => setConfirmState({ slotId: slot.id, title: slot.title, kind: "leave_waitlist" })} />
+                  );
+                })}
+              </div>
+            )}
           </div>
-        </div>
-
-        <div className="mt-auto px-6 pb-6 pt-6">
-          <div className="border-2 border-foreground/20 px-4 py-3 flex items-center gap-3">
-            <span className="relative flex h-2.5 w-2.5 shrink-0">
-              <span className="animate-ping absolute inline-flex h-full w-full bg-green-500 opacity-75" />
-              <span className="relative inline-flex h-2.5 w-2.5 bg-green-500" />
-            </span>
-            <span className="text-[10px] font-black uppercase tracking-widest text-foreground/40">
-              Realtime Active
-            </span>
-          </div>
-        </div>
-      </aside>
-
-      {/* ── RIGHT MAIN CONTENT ── */}
-      <main className="flex-1 min-w-0 flex flex-col">
-        <div className="border-b-2 border-foreground px-6 lg:px-10 py-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-           <div className="flex items-baseline gap-4">
-              <h2
-                className="text-xl font-black uppercase tracking-widest leading-none"
-                style={{ fontFamily: "'Syne', sans-serif" }}
-              >
-                {selectedBizName ? `${selectedBizName} — Slots` : "Available Slots"}
-              </h2>
-              <span className="text-xs text-foreground/40 uppercase tracking-widest font-bold">
-                {displayedSlots.length} items
-              </span>
-            </div>
-            
-            <div className="flex bg-foreground p-1 w-full sm:w-auto">
-              <button
-                onClick={() => setActiveTab("active")}
-                className={`flex-1 sm:w-32 py-2 text-xs font-black uppercase tracking-widest transition-colors ${
-                  activeTab === "active"
-                    ? "bg-background text-foreground"
-                    : "text-background hover:bg-background/20"
-                }`}
-              >
-                Active
-              </button>
-              <button
-                onClick={() => setActiveTab("history")}
-                className={`flex-1 sm:w-32 py-2 text-xs font-black uppercase tracking-widest transition-colors ${
-                  activeTab === "history"
-                    ? "bg-background text-foreground"
-                    : "text-background hover:bg-background/20"
-                }`}
-              >
-                History
-              </button>
-            </div>
-        </div>
-
-        <div className="flex-1 px-6 lg:px-10 py-8 flex flex-col gap-6">
-          {pageError && <ErrorBlock message={pageError} />}
-
-          {!selectedBiz ? (
-            <div className="border-2 border-dashed border-foreground/20 px-6 py-16 text-center">
-              <p className="text-sm font-black uppercase tracking-widest text-foreground/25">
-                Select a business to view slots
-              </p>
-            </div>
-          ) : loadingSlots ? (
-            <div className="flex flex-col gap-3">
-              <SlotSkeleton />
-              <SlotSkeleton />
-              <SlotSkeleton />
-            </div>
-          ) : displayedSlots.length === 0 ? (
-            <div className="border-2 border-dashed border-foreground/20 px-6 py-16 text-center">
-              <p className="text-sm font-black uppercase tracking-widest text-foreground/25">
-                No slots found in this category
-              </p>
-            </div>
-          ) : (
-            <div className="flex flex-col gap-3">
-              {displayedSlots.map((slot) => {
-                const action  = resolveAction(slot, bookedSlotIds, waitlistedSlotIds);
-                const loading = actionLoading === slot.id;
-                const entry   = waitlistEntries.find((w) => w.slot_id === slot.id);
-                return (
-                  <ClientSlotCard
-                    key={slot.id}
-                    slot={slot}
-                    action={action}
-                    loading={loading}
-                    isPast={activeTab === "history"}
-                    waitlistPosition={entry?.position}
-                    onBook={() => requirePhone(() => handleBook(slot.id, slot.title))}
-                    onJoinWaitlist={() => requirePhone(() => handleJoinWaitlist(slot.id, slot.title))}
-                    onCancelBooking={() =>
-                      setConfirmState({ slotId: slot.id, title: slot.title, kind: "cancel_booking" })
-                    }
-                    onLeaveWaitlist={() =>
-                      setConfirmState({ slotId: slot.id, title: slot.title, kind: "leave_waitlist" })
-                    }
-                  />
-                );
-              })}
-            </div>
-          )}
-        </div>
-      </main>
+        </main>
+      </div>
     </div>
   );
 }

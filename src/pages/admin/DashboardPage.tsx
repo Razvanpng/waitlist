@@ -8,7 +8,7 @@ import { supabase } from "@/lib/supabase";
 import { useAuthStore } from "@/store/authSlice";
 import type { Database } from "@/types/database.types";
 import { ProfileSettingsModal } from "@/components/ui/ProfileSettingsModal";
-import { StatCell, SlotSkeleton, ErrorBlock, FormField } from "@/components/ui/DashboardUI";
+import { SlotSkeleton, ErrorBlock, FormField } from "@/components/ui/DashboardUI";
 import {
   SlotCard,
   EditSlotModal,
@@ -68,56 +68,32 @@ export function DashboardPage() {
 
   const loadBusiness = useCallback(async () => {
     if (!profile?.id) return null;
-    const { data, error } = await supabase
-      .from("businesses")
-      .select("id")
-      .eq("owner_id", profile.id)
-      .single();
+    const { data, error } = await supabase.from("businesses").select("id").eq("owner_id", profile.id).single();
     if (error || !data) return null;
     return data.id;
   }, [profile?.id]);
 
   const loadSlots = useCallback(async (bId: string) => {
     setLoadingSlots(true);
-    const { data, error } = await supabase
-      .from("slots")
-      .select("*")
-      .eq("business_id", bId)
-      .order("starts_at", { ascending: true });
-    if (error) {
-      setFetchError(error.message);
-    } else {
-      setSlots(data ?? []);
-      setFetchError(null);
-    }
+    const { data, error } = await supabase.from("slots").select("*").eq("business_id", bId).order("starts_at", { ascending: true });
+    if (error) { setFetchError(error.message); } 
+    else { setSlots(data ?? []); setFetchError(null); }
     setLoadingSlots(false);
   }, []);
 
   useEffect(() => {
     (async () => {
       const bId = await loadBusiness();
-      if (!bId) {
-        setFetchError("no business profile found — create one first");
-        setLoadingSlots(false);
-        return;
-      }
-      setBusinessId(bId);
-      await loadSlots(bId);
+      if (!bId) { setFetchError("no business profile found — create one first"); setLoadingSlots(false); return; }
+      setBusinessId(bId); await loadSlots(bId);
     })();
   }, [loadBusiness, loadSlots]);
 
   useEffect(() => {
-    const channel = supabase
-      .channel("admin-dashboard")
-      .on("postgres_changes", { event: "*", schema: "public", table: "slots" }, () => {
-        if (businessIdRef.current) loadSlots(businessIdRef.current);
-      })
-      .on("postgres_changes", { event: "*", schema: "public", table: "bookings" }, () => {
-        if (businessIdRef.current) loadSlots(businessIdRef.current);
-      })
-      .on("postgres_changes", { event: "*", schema: "public", table: "waitlist_entries" }, () => {
-        if (businessIdRef.current) loadSlots(businessIdRef.current);
-      })
+    const channel = supabase.channel("admin-dashboard")
+      .on("postgres_changes", { event: "*", schema: "public", table: "slots" }, () => { if (businessIdRef.current) loadSlots(businessIdRef.current); })
+      .on("postgres_changes", { event: "*", schema: "public", table: "bookings" }, () => { if (businessIdRef.current) loadSlots(businessIdRef.current); })
+      .on("postgres_changes", { event: "*", schema: "public", table: "waitlist_entries" }, () => { if (businessIdRef.current) loadSlots(businessIdRef.current); })
       .subscribe();
     return () => { supabase.removeChannel(channel); };
   }, [loadSlots]);
@@ -125,48 +101,30 @@ export function DashboardPage() {
   const onCreateSubmit = async (values: SlotFormValues) => {
     if (!businessId) return;
     const { error } = await supabase.from("slots").insert({
-      business_id:  businessId,
-      title:        values.title,
-      starts_at:    new Date(values.starts_at).toISOString(),
-      ends_at:      new Date(values.ends_at).toISOString(),
-      capacity:     values.capacity,
-      booked_count: 0,
-      status:       "available",
+      business_id: businessId, title: values.title, starts_at: new Date(values.starts_at).toISOString(), ends_at: new Date(values.ends_at).toISOString(), capacity: values.capacity, booked_count: 0, status: "available",
     });
     if (error) { toast.error(error.message); return; }
     toast.success(`slot "${values.title}" created`);
-    reset();
-    setFormOpen(false);
-    await loadSlots(businessId);
+    reset(); setFormOpen(false); await loadSlots(businessId);
   };
 
-  const confirmAndCancel = (slot: Slot) =>
-    setConfirmCancel({ slotId: slot.id, title: slot.title });
+  const confirmAndCancel = (slot: Slot) => setConfirmCancel({ slotId: slot.id, title: slot.title });
 
   const executeCancel = async () => {
     if (!confirmCancel || !businessId) return;
-    const { error } = await supabase
-      .from("slots")
-      .update({ status: "cancelled" })
-      .eq("id", confirmCancel.slotId);
-    if (error) {
-      toast.error(error.message);
-    } else {
-      toast.success(`"${confirmCancel.title}" cancelled`);
-      await loadSlots(businessId);
-    }
+    const { error } = await supabase.from("slots").update({ status: "cancelled" }).eq("id", confirmCancel.slotId);
+    if (error) { toast.error(error.message); } 
+    else { toast.success(`"${confirmCancel.title}" cancelled`); await loadSlots(businessId); }
     setConfirmCancel(null);
   };
 
   const handleRestore = async (slotId: string) => {
     if (!businessId) return;
-    const slot = slots.find((s) => s.id === slotId);
-    if (!slot) return;
+    const slot = slots.find((s) => s.id === slotId); if (!slot) return;
     const status = slot.booked_count >= slot.capacity ? "booked" : "available";
     const { error } = await supabase.from("slots").update({ status }).eq("id", slotId);
     if (error) { toast.error(error.message); return; }
-    toast.success(`"${slot.title}" restored`);
-    await loadSlots(businessId);
+    toast.success(`"${slot.title}" restored`); await loadSlots(businessId);
   };
 
   const now = new Date().toISOString().slice(0, 16);
@@ -177,312 +135,151 @@ export function DashboardPage() {
   const displayedSlots = activeTab === "active" ? activeSlots : pastSlots;
 
   const stats = {
-    total:     slots.length,
-    open:      activeSlots.filter((s) => s.status === "available").length,
-    full:      activeSlots.filter((s) => s.status === "booked").length,
+    total: slots.length,
+    open: activeSlots.filter((s) => s.status === "available").length,
+    full: activeSlots.filter((s) => s.status === "booked").length,
     cancelled: slots.filter((s) => s.status === "cancelled").length,
   };
 
   return (
-    <div className="min-h-screen bg-background text-foreground font-sans flex flex-col lg:flex-row">
-      <Toaster
-        position="bottom-right"
-        toastOptions={{
-          className:
-            "border-2 border-foreground rounded-none shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] font-bold uppercase tracking-widest",
-        }}
-      />
+    <div className="min-h-screen lg:h-screen w-full bg-background text-foreground font-sans p-3 sm:p-6 lg:p-8 box-border flex flex-col">
+      <Toaster position="bottom-right" toastOptions={{ className: "border-2 border-foreground rounded-none shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] font-bold uppercase tracking-widest" }} />
 
+      {/* Modals */}
       {showProfileSettings && <ProfileSettingsModal profile={profile} onClose={() => setShowProfileSettings(false)} />}
-      
-      {confirmCancel && (
-        <CancelConfirmModal
-          title={confirmCancel.title}
-          onConfirm={executeCancel}
-          onCancel={() => setConfirmCancel(null)}
-        />
-      )}
+      {confirmCancel && <CancelConfirmModal title={confirmCancel.title} onConfirm={executeCancel} onCancel={() => setConfirmCancel(null)} />}
+      {editTarget && <EditSlotModal slot={editTarget} onClose={() => setEditTarget(null)} onSaved={() => businessId && loadSlots(businessId)} />}
+      {clientsTarget && <ClientsModal target={clientsTarget} onClose={() => setClientsTarget(null)} />}
+      {showBulkGenerator && businessId && <BulkGeneratorModal businessId={businessId} onClose={() => setShowBulkGenerator(false)} onSaved={() => businessId && loadSlots(businessId)} />}
 
-      {editTarget && (
-        <EditSlotModal
-          slot={editTarget}
-          onClose={() => setEditTarget(null)}
-          onSaved={() => businessId && loadSlots(businessId)}
-        />
-      )}
-
-      {clientsTarget && (
-        <ClientsModal
-          target={clientsTarget}
-          onClose={() => setClientsTarget(null)}
-        />
-      )}
-
-      {showBulkGenerator && businessId && (
-        <BulkGeneratorModal
-          businessId={businessId}
-          onClose={() => setShowBulkGenerator(false)}
-          onSaved={() => businessId && loadSlots(businessId)}
-        />
-      )}
-
-      {/* ── LEFT SIDEBAR ── */}
-      <aside className="
-        lg:w-[380px] lg:shrink-0 lg:sticky lg:top-0 lg:h-screen lg:overflow-y-auto
-        lg:border-r-4 border-b-4 lg:border-b-0 border-foreground
-        flex flex-col
-      ">
-        <div className="p-6 border-b-2 border-foreground flex flex-col gap-6">
-          <div>
-            <span className="text-[10px] font-bold tracking-[0.3em] text-foreground/40 uppercase">
+      {/* Main Frame (Mondrian Container) */}
+      <div className="w-full flex-1 border-4 border-foreground flex flex-col lg:flex-row shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] bg-background lg:overflow-hidden">
+        
+        {/* ── LEFT COLUMN (GRID) ── */}
+        <aside className="lg:w-[420px] flex flex-col border-b-4 lg:border-b-0 lg:border-r-4 border-foreground shrink-0 bg-background z-10">
+          
+          {/* Brutalist Title Box */}
+          <div className="p-6 lg:p-8 border-b-4 border-foreground flex flex-col justify-end min-h-[220px] lg:min-h-[280px] bg-foreground text-background relative overflow-hidden">
+            <div className="absolute top-0 right-0 p-4 opacity-10">
+              <Zap className="w-32 h-32" />
+            </div>
+            <span className="text-[10px] font-black tracking-[0.4em] uppercase opacity-70 mb-auto relative z-10">
               Smart Waitlist
             </span>
-            <h1
-              className="text-3xl font-black uppercase tracking-tight leading-none mt-1"
-              style={{ fontFamily: "'Syne', sans-serif" }}
-            >
-              Admin<br />Protocol
+            <h1 className="text-5xl lg:text-[4.5rem] font-black uppercase tracking-tighter leading-[0.85] relative z-10" style={{ fontFamily: "'Syne', sans-serif" }}>
+              Admin<br/>Protocol
             </h1>
           </div>
 
-          <div className="flex flex-col gap-3">
-            <button
-              onClick={() => setShowProfileSettings(true)}
-              className="flex items-center gap-2 border-2 border-foreground px-3 py-3 text-xs font-bold uppercase tracking-widest hover:bg-foreground hover:text-background transition-colors justify-center"
-            >
-              <UserCircle className="h-4 w-4" />
-              {profile?.full_name ?? profile?.email}
-            </button>
-            <button
-              onClick={() => signOut()}
-              className="flex items-center justify-center gap-2 border-2 border-foreground px-3 py-3 text-xs font-bold uppercase tracking-widest hover:bg-destructive hover:text-destructive-foreground hover:border-destructive transition-colors"
-            >
-              <LogOut className="h-3.5 w-3.5" />
-              Exit
-            </button>
-          </div>
-        </div>
-
-        <div className="p-6 flex flex-col gap-3">
-          <span
-            className="text-[10px] font-black uppercase tracking-[0.3em] text-foreground/30"
-            style={{ fontFamily: "'Syne', sans-serif" }}
-          >
-            System Status
-          </span>
-
-          <div className="grid grid-cols-2 border-2 border-foreground divide-x-2 divide-y-2 divide-foreground">
-            <StatCell label="Total" value={stats.total} />
-            <StatCell label="Open" value={stats.open} accent="text-green-500" />
-            <StatCell label="Full" value={stats.full} accent="text-yellow-400" />
-            <StatCell label="Cancelled" value={stats.cancelled} accent="text-foreground/30" />
-          </div>
-        </div>
-
-        <div className="mt-auto px-6 pb-6">
-          <div className="border-2 border-foreground/20 px-4 py-3 flex items-center gap-3">
-            <span className="relative flex h-2.5 w-2.5 shrink-0">
-              <span className="animate-ping absolute inline-flex h-full w-full bg-green-500 opacity-75" />
-              <span className="relative inline-flex h-2.5 w-2.5 bg-green-500" />
-            </span>
-            <span className="text-[10px] font-black uppercase tracking-widest text-foreground/40">
-              Realtime Active
-            </span>
-          </div>
-        </div>
-      </aside>
-
-      {/* ── RIGHT MAIN CONTENT ── */}
-      <main className="flex-1 min-w-0 flex flex-col">
-        <div className="border-b-2 border-foreground px-6 lg:px-10 py-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-           <div className="flex items-baseline gap-4">
-              <h2
-                className="text-xl font-black uppercase tracking-widest leading-none"
-                style={{ fontFamily: "'Syne', sans-serif" }}
-              >
-                Slot Management
-              </h2>
-              <span className="text-xs text-foreground/40 uppercase tracking-widest font-bold">
-                {displayedSlots.length} items
-              </span>
+          {/* User Auth Box */}
+          <div className="border-b-4 border-foreground p-6 flex flex-col gap-4 bg-background">
+            <div className="flex items-center justify-between">
+              <span className="text-[10px] font-black uppercase tracking-[0.25em] text-foreground/40">Operator</span>
+              <span className="text-sm font-black uppercase tracking-wider truncate text-right ml-4 text-foreground/80">{profile?.full_name ?? profile?.email}</span>
             </div>
+            <div className="grid grid-cols-2 gap-3 mt-1">
+              <button onClick={() => setShowProfileSettings(true)} className="border-2 border-foreground py-3 flex items-center justify-center gap-2 text-xs font-black uppercase tracking-widest hover:bg-foreground hover:text-background transition-colors"><UserCircle className="w-4 h-4"/> Profile</button>
+              <button onClick={() => signOut()} className="border-2 border-foreground py-3 flex items-center justify-center gap-2 text-xs font-black uppercase tracking-widest hover:bg-destructive hover:text-destructive-foreground hover:border-destructive transition-colors"><LogOut className="w-4 h-4"/> Exit</button>
+            </div>
+          </div>
+
+          {/* Telemetry Grid (Mondrian Stats) */}
+          <div className="flex-1 flex flex-col">
+            <div className="p-4 border-b-4 border-foreground bg-foreground/5">
+              <span className="text-[10px] font-black uppercase tracking-[0.3em] text-foreground/50">Telemetry</span>
+            </div>
+            <div className="grid grid-cols-2 flex-1 min-h-[200px]">
+              <div className="border-r-4 border-b-4 border-foreground p-6 flex flex-col justify-center items-center text-center">
+                <span className="text-[10px] font-black uppercase tracking-[0.2em] text-foreground/40 mb-1">Total</span>
+                <span className="text-5xl font-black">{stats.total}</span>
+              </div>
+              <div className="border-b-4 border-foreground p-6 flex flex-col justify-center items-center text-center bg-green-400/20">
+                <span className="text-[10px] font-black uppercase tracking-[0.2em] text-green-700/60 mb-1">Open</span>
+                <span className="text-5xl font-black text-green-600">{stats.open}</span>
+              </div>
+              <div className="border-r-4 lg:border-b-0 border-foreground p-6 flex flex-col justify-center items-center text-center bg-yellow-400/20">
+                <span className="text-[10px] font-black uppercase tracking-[0.2em] text-yellow-700/60 mb-1">Full</span>
+                <span className="text-5xl font-black text-yellow-600">{stats.full}</span>
+              </div>
+              <div className="p-6 flex flex-col justify-center items-center text-center bg-foreground/5">
+                <span className="text-[10px] font-black uppercase tracking-[0.2em] text-foreground/40 mb-1">Cancelled</span>
+                <span className="text-5xl font-black text-foreground/30">{stats.cancelled}</span>
+              </div>
+            </div>
+          </div>
+        </aside>
+
+        {/* ── RIGHT COLUMN (CONTENT) ── */}
+        <main className="flex-1 flex flex-col min-w-0 bg-background lg:overflow-hidden relative">
+          
+          {/* Top Action Bar (Mondrian Header) */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 border-b-4 border-foreground shrink-0 divide-y-4 sm:divide-y-0 sm:divide-x-4 border-foreground bg-background z-20 relative">
+            <button onClick={() => { setFormOpen((p) => !p); setShowBulkGenerator(false); }} className={`p-6 lg:p-5 flex items-center justify-between lg:justify-center gap-3 font-black uppercase tracking-widest text-xs lg:text-[10px] xl:text-xs hover:bg-foreground hover:text-background transition-colors ${formOpen ? 'bg-foreground text-background' : ''}`}>
+              <Plus className={`w-4 h-4 transition-transform ${formOpen ? 'rotate-45' : ''}`} /> <span className="mt-0.5">Manual Slot</span>
+            </button>
+            <button onClick={() => { setShowBulkGenerator(true); setFormOpen(false); }} disabled={!businessId} className="p-6 lg:p-5 flex items-center justify-between lg:justify-center gap-3 font-black uppercase tracking-widest text-xs lg:text-[10px] xl:text-xs hover:bg-primary hover:text-foreground transition-colors disabled:opacity-30 disabled:cursor-not-allowed">
+              <Zap className="w-4 h-4" /> <span className="mt-0.5">Bulk Gen</span>
+            </button>
+            <button onClick={() => setActiveTab("active")} className={`p-6 lg:p-5 font-black uppercase tracking-widest text-xs lg:text-[10px] xl:text-xs transition-colors ${activeTab === 'active' ? 'bg-green-400/20 shadow-[inset_0_-4px_0_0_#22c55e] text-green-700' : 'text-foreground/50 hover:text-foreground hover:bg-foreground/5'}`}>
+              Active Slots
+            </button>
+            <button onClick={() => setActiveTab("history")} className={`p-6 lg:p-5 font-black uppercase tracking-widest text-xs lg:text-[10px] xl:text-xs transition-colors ${activeTab === 'history' ? 'bg-foreground/10 shadow-[inset_0_-4px_0_0_#000] text-foreground' : 'text-foreground/50 hover:text-foreground hover:bg-foreground/5'}`}>
+              History Log
+            </button>
+          </div>
+
+          {/* Scrollable Canvas */}
+          <div className="flex-1 overflow-y-auto bg-[#f4f4f0] p-4 sm:p-6 lg:p-10 relative">
             
-            <div className="flex bg-foreground p-1 w-full sm:w-auto">
-              <button
-                onClick={() => setActiveTab("active")}
-                className={`flex-1 sm:w-32 py-2 text-xs font-black uppercase tracking-widest transition-colors ${
-                  activeTab === "active"
-                    ? "bg-background text-foreground"
-                    : "text-background hover:bg-background/20"
-                }`}
-              >
-                Active
-              </button>
-              <button
-                onClick={() => setActiveTab("history")}
-                className={`flex-1 sm:w-32 py-2 text-xs font-black uppercase tracking-widest transition-colors ${
-                  activeTab === "history"
-                    ? "bg-background text-foreground"
-                    : "text-background hover:bg-background/20"
-                }`}
-              >
-                History
-              </button>
-            </div>
-        </div>
-
-        <div className="flex-1 px-6 lg:px-10 py-8 flex flex-col gap-8">
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <button
-              onClick={() => { setFormOpen((p) => !p); setShowBulkGenerator(false); }}
-              className="flex items-center justify-between gap-3 border-2 border-foreground px-6 py-5 hover:bg-foreground hover:text-background transition-colors group"
-            >
-              <div className="flex flex-col items-start gap-0.5">
-                <span
-                  className="text-xs font-black uppercase tracking-[0.2em] text-foreground/40 group-hover:text-background/60 transition-colors"
-                  style={{ fontFamily: "'Syne', sans-serif" }}
-                >
-                  Manual
-                </span>
-                <span
-                  className="text-lg font-black uppercase tracking-widest leading-none"
-                  style={{ fontFamily: "'Syne', sans-serif" }}
-                >
-                  Create Slot
-                </span>
-              </div>
-              <Plus className={`h-6 w-6 shrink-0 transition-transform ${formOpen ? "rotate-45" : ""}`} />
-            </button>
-
-            <button
-              onClick={() => { setShowBulkGenerator(true); setFormOpen(false); }}
-              disabled={!businessId}
-              className="flex items-center justify-between gap-3 bg-foreground text-background px-6 py-5 hover:bg-primary hover:text-foreground transition-colors disabled:opacity-30 disabled:cursor-not-allowed group"
-            >
-              <div className="flex flex-col items-start gap-0.5">
-                <span
-                  className="text-xs font-black uppercase tracking-[0.2em] text-background/50 group-hover:text-foreground/50 transition-colors"
-                  style={{ fontFamily: "'Syne', sans-serif" }}
-                >
-                  Smart Generator
-                </span>
-                <span
-                  className="text-lg font-black uppercase tracking-widest leading-none"
-                  style={{ fontFamily: "'Syne', sans-serif" }}
-                >
-                  Bulk Generate
-                </span>
-              </div>
-              <Zap className="h-6 w-6 shrink-0" />
-            </button>
-          </div>
-
-          {formOpen && (
-            <div className="border-2 border-foreground">
-              <div className="border-b-2 border-foreground px-6 py-3 bg-foreground/5">
-                <span
-                  className="text-[10px] font-black uppercase tracking-[0.25em] text-foreground/50"
-                  style={{ fontFamily: "'Syne', sans-serif" }}
-                >
-                  New Slot Details
-                </span>
-              </div>
-              <form
-                onSubmit={handleSubmit(onCreateSubmit)}
-                noValidate
-                className="px-6 py-7 flex flex-col gap-7"
-              >
-                <div className="grid sm:grid-cols-2 gap-7">
-                  <FormField label="Slot Title" error={errors.title?.message}>
-                    <input
-                      {...register("title")}
-                      type="text"
-                      placeholder="e.g. Morning Consultation"
-                      className="border-b-4 border-foreground bg-transparent py-3 text-xl outline-none focus:bg-foreground/5 w-full"
-                    />
-                  </FormField>
-                  <FormField label="Capacity" error={errors.capacity?.message}>
-                    <input
-                      {...register("capacity")}
-                      type="number"
-                      min={1}
-                      placeholder="1"
-                      className="border-b-4 border-foreground bg-transparent py-3 text-xl outline-none focus:bg-foreground/5 w-full"
-                    />
-                  </FormField>
-                  <FormField label="Starts At" error={errors.starts_at?.message}>
-                    <input
-                      {...register("starts_at")}
-                      type="datetime-local"
-                      min={now}
-                      className="border-b-4 border-foreground bg-transparent py-3 text-xl outline-none focus:bg-foreground/5 w-full"
-                    />
-                  </FormField>
-                  <FormField label="Ends At" error={errors.ends_at?.message}>
-                    <input
-                      {...register("ends_at")}
-                      type="datetime-local"
-                      min={now}
-                      className="border-b-4 border-foreground bg-transparent py-3 text-xl outline-none focus:bg-foreground/5 w-full"
-                    />
-                  </FormField>
+            {formOpen && (
+              <div className="border-4 border-foreground bg-background mb-8 shadow-[8px_8px_0px_0px_rgba(0,0,0,1)]">
+                <div className="border-b-4 border-foreground px-6 py-4 bg-foreground text-background">
+                  <span className="text-[10px] font-black uppercase tracking-[0.25em]" style={{ fontFamily: "'Syne', sans-serif" }}>Create New Configuration</span>
                 </div>
-                <div className="flex gap-3">
-                  <button
-                    type="submit"
-                    disabled={isSubmitting}
-                    className="flex flex-1 items-center justify-center gap-3 bg-foreground py-4 px-8 text-sm font-black uppercase tracking-widest text-background hover:bg-primary hover:text-foreground transition-colors disabled:opacity-40 disabled:cursor-not-allowed"
-                  >
-                    {isSubmitting && <Loader2 className="h-4 w-4 animate-spin" />}
-                    {isSubmitting ? "Saving…" : "Confirm Slot"}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => { reset(); setFormOpen(false); }}
-                    className="border-2 border-foreground py-4 px-6 text-sm font-bold uppercase tracking-widest hover:bg-foreground hover:text-background transition-colors"
-                  >
-                    Discard
-                  </button>
-                </div>
-              </form>
-            </div>
-          )}
+                <form onSubmit={handleSubmit(onCreateSubmit)} noValidate className="px-6 py-8 flex flex-col gap-8">
+                  <div className="grid sm:grid-cols-2 gap-8">
+                    <FormField label="Slot Title" error={errors.title?.message}>
+                      <input {...register("title")} type="text" placeholder="e.g. Consultation" className="border-b-4 border-foreground bg-foreground/5 py-3 px-2 text-xl outline-none focus:bg-background w-full" />
+                    </FormField>
+                    <FormField label="Capacity" error={errors.capacity?.message}>
+                      <input {...register("capacity")} type="number" min={1} placeholder="1" className="border-b-4 border-foreground bg-foreground/5 py-3 px-2 text-xl outline-none focus:bg-background w-full" />
+                    </FormField>
+                    <FormField label="Starts At" error={errors.starts_at?.message}>
+                      <input {...register("starts_at")} type="datetime-local" min={now} className="border-b-4 border-foreground bg-foreground/5 py-3 px-2 text-xl outline-none focus:bg-background w-full" />
+                    </FormField>
+                    <FormField label="Ends At" error={errors.ends_at?.message}>
+                      <input {...register("ends_at")} type="datetime-local" min={now} className="border-b-4 border-foreground bg-foreground/5 py-3 px-2 text-xl outline-none focus:bg-background w-full" />
+                    </FormField>
+                  </div>
+                  <div className="flex gap-4">
+                    <button type="submit" disabled={isSubmitting} className="flex flex-1 items-center justify-center gap-3 bg-foreground py-5 text-sm font-black uppercase tracking-widest text-background hover:bg-primary hover:text-foreground transition-colors disabled:opacity-40 disabled:cursor-not-allowed">
+                      {isSubmitting && <Loader2 className="h-4 w-4 animate-spin" />} {isSubmitting ? "Deploying…" : "Deploy Slot"}
+                    </button>
+                    <button type="button" onClick={() => { reset(); setFormOpen(false); }} className="border-4 border-foreground py-5 px-8 text-sm font-black uppercase tracking-widest hover:bg-foreground hover:text-background transition-colors">Abort</button>
+                  </div>
+                </form>
+              </div>
+            )}
 
-          {fetchError && <ErrorBlock message={fetchError} />}
+            {fetchError && <ErrorBlock message={fetchError} />}
 
-          <section className="flex flex-col gap-4">
             {loadingSlots ? (
-              <div className="flex flex-col gap-3">
-                <SlotSkeleton />
-                <SlotSkeleton />
-                <SlotSkeleton />
-              </div>
-            ) : slots.length === 0 && !fetchError ? (
-              <div className="border-2 border-dashed border-foreground/20 px-6 py-16 text-center">
-                <p className="text-sm font-black uppercase tracking-widest text-foreground/25">
-                  No slots yet — create one above
-                </p>
+              <div className="flex flex-col gap-4"><SlotSkeleton /><SlotSkeleton /></div>
+            ) : displayedSlots.length === 0 && !fetchError ? (
+              <div className="border-4 border-dashed border-foreground/20 px-6 py-20 text-center flex flex-col items-center justify-center h-full min-h-[300px]">
+                <span className="text-4xl mb-4 opacity-20">🕳️</span>
+                <p className="text-sm font-black uppercase tracking-widest text-foreground/30">No data found in this sector</p>
               </div>
             ) : (
-              <div className="flex flex-col gap-3">
+              <div className="flex flex-col gap-4">
                 {displayedSlots.map((slot) => (
-                  <SlotCard
-                    key={slot.id}
-                    slot={slot}
-                    isPast={activeTab === "history"}
-                    onEdit={() => setEditTarget(slot)}
-                    onCancel={() => confirmAndCancel(slot)}
-                    onRestore={handleRestore}
-                    onViewClients={() =>
-                      setClientsTarget({ slotId: slot.id, title: slot.title })
-                    }
-                  />
+                  <SlotCard key={slot.id} slot={slot} isPast={activeTab === "history"} onEdit={() => setEditTarget(slot)} onCancel={() => confirmAndCancel(slot)} onRestore={handleRestore} onViewClients={() => setClientsTarget({ slotId: slot.id, title: slot.title })} />
                 ))}
               </div>
             )}
-          </section>
-        </div>
-      </main>
+          </div>
+        </main>
+      </div>
     </div>
   );
 }
