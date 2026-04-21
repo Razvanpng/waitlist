@@ -396,31 +396,43 @@ interface GeneratedSlot {
   capacity:     number; booked_count: number; status: "available";
 }
 
+// REPARAT: String coercion and timezone stability
 function generateSlots(values: BulkFormValues, businessId: string): GeneratedSlot[] {
   const slots: GeneratedSlot[] = [];
+  
+  // Forțăm conversia matematică ca să prevenim concatenările de tip "30" + "10" = "3010"
+  const slotDuration = Number(values.slotDuration);
+  const breakDuration = Number(values.breakDuration) || 0;
+
+  // Safety net contra infinit loop la tastare
+  if (isNaN(slotDuration) || slotDuration <= 0) return [];
+
   const [startHour, startMin] = values.startTime.split(":").map(Number);
   const [endHour, endMin]     = values.endTime.split(":").map(Number);
   const dayEndMinutes         = endHour * 60 + endMin;
 
-  const cursor = new Date(values.startDate + "T00:00:00");
-  const last   = new Date(values.endDate   + "T00:00:00");
+  // Folosim prânzul (ora 12:00:00) ca să evităm erorile cauzate de trecerea la ora de vară/iarnă (DST)
+  const [sYear, sMonth, sDay] = values.startDate.split("-").map(Number);
+  const [eYear, eMonth, eDay] = values.endDate.split("-").map(Number);
+  const cursor = new Date(sYear, sMonth - 1, sDay, 12, 0, 0);
+  const last   = new Date(eYear, eMonth - 1, eDay, 12, 0, 0);
 
   while (cursor <= last) {
     const dayOfWeek = cursor.getDay();
     if (values.daysOfWeek.includes(dayOfWeek)) {
       let slotStartMinutes = startHour * 60 + startMin;
       while (true) {
-        const slotEndMinutes = slotStartMinutes + values.slotDuration;
+        const slotEndMinutes = slotStartMinutes + slotDuration;
         if (slotEndMinutes > dayEndMinutes) break;
 
-        const startsAt = new Date(cursor); startsAt.setHours(Math.floor(slotStartMinutes / 60), slotStartMinutes % 60, 0, 0);
-        const endsAt = new Date(cursor); endsAt.setHours(Math.floor(slotEndMinutes / 60), slotEndMinutes % 60, 0, 0);
+        const startsAt = new Date(cursor.getFullYear(), cursor.getMonth(), cursor.getDate(), Math.floor(slotStartMinutes / 60), slotStartMinutes % 60, 0, 0);
+        const endsAt = new Date(cursor.getFullYear(), cursor.getMonth(), cursor.getDate(), Math.floor(slotEndMinutes / 60), slotEndMinutes % 60, 0, 0);
 
         slots.push({
           business_id: businessId, title: values.title, starts_at: startsAt.toISOString(), ends_at: endsAt.toISOString(),
-          capacity: values.capacity, booked_count: 0, status: "available",
+          capacity: Number(values.capacity) || 1, booked_count: 0, status: "available",
         });
-        slotStartMinutes = slotEndMinutes + values.breakDuration;
+        slotStartMinutes = slotEndMinutes + breakDuration;
       }
     }
     cursor.setDate(cursor.getDate() + 1);
@@ -459,7 +471,7 @@ export function BulkGeneratorModal({ businessId, onClose, onSaved }: { businessI
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-sm px-4 overflow-y-auto pt-10">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-background/80 backdrop-blur-sm px-4 overflow-y-auto pt-10 pb-10">
       <div className="w-full max-w-2xl border-4 border-foreground bg-background shadow-[8px_8px_0px_0px_rgba(0,0,0,1)] flex flex-col my-auto max-h-[90vh]">
         <div className="border-b-4 border-foreground px-6 py-5 flex items-start justify-between gap-4 shrink-0">
           <div>
@@ -550,4 +562,8 @@ export function BulkGeneratorModal({ businessId, onClose, onSaved }: { businessI
       </div>
     </div>
   );
+}
+
+function SectionLabel({ children }: { children: React.ReactNode }) {
+  return <span className="text-[10px] font-black uppercase tracking-[0.3em] text-foreground/30 border-b border-foreground/10 pb-1" style={{ fontFamily: "'Syne', sans-serif" }}>{children}</span>;
 }
