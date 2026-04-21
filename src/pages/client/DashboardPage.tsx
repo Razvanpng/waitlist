@@ -111,23 +111,37 @@ export function ClientDashboardPage() {
     else { setLocalPhone(phoneNumber); setShowPhoneModal(false); toast.success("Phone saved"); if (pendingAction) { pendingAction(); setPendingAction(null); } }
   };
 
-  const handleBook = async (slotId: string, title: string) => {
+  const handleBook = async (slotId: string, slotTitle: string) => {
     if (!profile?.id) return;
     setActionLoading(slotId);
-    const { data, error } = await supabase.rpc("book_slot", { p_slot_id: slotId, p_client_id: profile.id });
+    const { data, error } = await supabase.rpc("book_slot", {
+      p_slot_id:   slotId,
+      p_client_id: profile.id,
+    });
     const res = data as any;
-    if (error || res?.success === false) toast.error(error?.message || res?.error || "Booking failed");
-    else { toast.success(`"${title}" booked`); await refresh(); }
+    if (error || res?.success === false) {
+      toast.error(error?.message ?? res?.error ?? "booking failed");
+    } else {
+      toast.success(`"${slotTitle}" booked`);
+      await refresh();
+    }
     setActionLoading(null);
   };
 
-  const handleJoinWaitlist = async (slotId: string, title: string) => {
+  const handleJoinWaitlist = async (slotId: string, slotTitle: string) => {
     if (!profile?.id) return;
     setActionLoading(slotId);
-    const { data, error } = await supabase.rpc("join_waitlist", { p_slot_id: slotId, p_client_id: profile.id });
+    const { data, error } = await supabase.rpc("join_waitlist", {
+      p_slot_id:   slotId,
+      p_client_id: profile.id,
+    });
     const res = data as any;
-    if (error || res?.success === false) toast.error(error?.message || res?.error || "Waitlist failed");
-    else { toast.success(`Joined waitlist for "${title}"`); await refresh(); }
+    if (error || res?.success === false) {
+      toast.error(error?.message ?? res?.error ?? "could not join waitlist");
+    } else {
+      toast.success(`joined waitlist for "${slotTitle}"`);
+      await refresh();
+    }
     setActionLoading(null);
   };
 
@@ -152,85 +166,208 @@ export function ClientDashboardPage() {
   const pastSlots = slots.filter((s) => new Date(s.ends_at).getTime() < currentTime);
   const displayedSlots = activeTab === "active" ? activeSlots : pastSlots;
 
+  const selectedBizName = businesses.find((b) => b.id === selectedBiz)?.name ?? "";
+
   return (
-    <div className="min-h-screen bg-background text-foreground font-sans">
+    <div className="min-h-screen bg-background text-foreground font-sans flex flex-col lg:flex-row">
       <Toaster position="bottom-right" toastOptions={{ className: "border-2 border-foreground rounded-none shadow-[4px_4px_0px_0px_rgba(0,0,0,1)] font-bold uppercase tracking-widest" }} />
 
       {showProfileSettings && <ProfileSettingsModal profile={profile} onClose={() => setShowProfileSettings(false)} />}
       {showPhoneModal && <PhoneModal phoneNumber={phoneNumber} setPhoneNumber={setPhoneNumber} onSave={savePhoneAndContinue} onCancel={() => setShowPhoneModal(false)} isSaving={savingPhone} />}
-      {confirmState && <ActionConfirmModal state={confirmState} onConfirm={confirmState.kind === "cancel_booking" ? executeCancelBooking : executeLeaveWaitlist} onCancel={() => setConfirmState(null)} />}
+      
+      {confirmState && (
+        <ActionConfirmModal 
+          state={confirmState} 
+          onConfirm={confirmState.kind === "cancel_booking" ? executeCancelBooking : executeLeaveWaitlist} 
+          onCancel={() => setConfirmState(null)} 
+        />
+      )}
 
-      <header className="border-b-4 border-foreground px-6 py-5 flex items-center justify-between">
-        <div className="flex flex-col gap-0.5">
-          <span className="text-[10px] font-bold tracking-[0.3em] text-foreground/40 uppercase">Smart Waitlist</span>
-          <h1 className="text-2xl font-black uppercase tracking-tight leading-none" style={{ fontFamily: "'Syne', sans-serif" }}>Client Terminal</h1>
+      {/* ── LEFT SIDEBAR ── */}
+      <aside className="
+        lg:w-[380px] lg:shrink-0 lg:sticky lg:top-0 lg:h-screen lg:overflow-y-auto
+        lg:border-r-4 border-b-4 lg:border-b-0 border-foreground
+        flex flex-col
+      ">
+        <div className="p-6 border-b-2 border-foreground flex flex-col gap-6">
+          <div>
+            <span className="text-[10px] font-bold tracking-[0.3em] text-foreground/40 uppercase">
+              Smart Waitlist
+            </span>
+            <h1
+              className="text-3xl font-black uppercase tracking-tight leading-none mt-1"
+              style={{ fontFamily: "'Syne', sans-serif" }}
+            >
+              Client<br />Terminal
+            </h1>
+          </div>
+
+          <div className="flex flex-col gap-3">
+             <button
+              onClick={() => setShowProfileSettings(true)}
+              className="flex items-center gap-2 border-2 border-foreground px-3 py-3 text-xs font-bold uppercase tracking-widest hover:bg-foreground hover:text-background transition-colors justify-center"
+            >
+              <UserCircle className="h-4 w-4" />
+              {profile?.full_name ?? profile?.email}
+            </button>
+            <button
+              onClick={() => signOut()}
+              className="flex items-center justify-center gap-2 border-2 border-foreground px-3 py-3 text-xs font-bold uppercase tracking-widest hover:bg-destructive hover:text-destructive-foreground hover:border-destructive transition-colors"
+            >
+              <LogOut className="h-3.5 w-3.5" />
+              Exit
+            </button>
+          </div>
         </div>
-        <div className="flex items-center gap-4">
-          <button
-            onClick={() => setShowProfileSettings(true)}
-            className="hidden sm:flex items-center gap-2 text-xs font-bold text-foreground/50 hover:text-foreground uppercase tracking-widest transition-colors"
+
+        <div className="p-6 border-b-2 border-foreground flex flex-col gap-3">
+          <span
+            className="text-[10px] font-black uppercase tracking-[0.3em] text-foreground/30"
+            style={{ fontFamily: "'Syne', sans-serif" }}
           >
-            <UserCircle className="h-4 w-4" />
-            {profile?.full_name ?? profile?.email}
-          </button>
-          <button onClick={() => signOut()} className="flex items-center gap-2 border-2 border-foreground px-4 py-2 text-xs font-bold uppercase tracking-widest hover:bg-foreground hover:text-background transition-colors"><LogOut className="h-3.5 w-3.5" /> Exit</button>
-        </div>
-      </header>
+            Business
+          </span>
 
-      <main className="mx-auto max-w-4xl px-6 py-10 flex flex-col gap-10">
-        <div className="grid grid-cols-3 border-2 border-foreground divide-x-2 divide-foreground">
-          <StatCell label="My Bookings" value={bookings.length} accent="text-green-500" />
-          <StatCell label="Waitlists" value={waitlistEntries.length} accent="text-yellow-400" />
-          <StatCell label="Active Slots" value={activeSlots.length} accent="text-foreground" />
-        </div>
-
-        <section className="flex flex-col gap-3">
-          <label className="text-[10px] font-bold uppercase tracking-[0.25em] text-foreground/50">Select Business</label>
           {loadingBiz ? (
-            <div className="flex items-center gap-2 border-b-4 border-foreground py-3 text-foreground/40"><Loader2 className="h-4 w-4 animate-spin" /><span className="text-sm font-bold uppercase tracking-widest">Loading…</span></div>
+            <div className="flex items-center gap-2 border-b-4 border-foreground py-3 text-foreground/40">
+              <Loader2 className="h-4 w-4 animate-spin" />
+              <span className="text-sm font-bold uppercase tracking-widest">Loading…</span>
+            </div>
           ) : (
             <div className="relative">
               <Building2 className="pointer-events-none absolute left-0 top-1/2 -translate-y-1/2 h-5 w-5 text-foreground/40" />
-              <select value={selectedBiz} onChange={(e) => setSelectedBiz(e.target.value)} className="w-full appearance-none border-b-4 border-foreground bg-transparent pl-7 pr-8 py-3 text-xl font-bold outline-none focus:bg-foreground/5 cursor-pointer">
-                {businesses.map((b) => <option key={b.id} value={b.id}>{b.name}</option>)}
+              <select
+                id="biz-select"
+                value={selectedBiz}
+                onChange={(e) => setSelectedBiz(e.target.value)}
+                className="w-full appearance-none border-b-4 border-foreground bg-transparent pl-7 pr-8 py-3 text-lg font-bold outline-none focus:bg-foreground/5 cursor-pointer"
+              >
+                {businesses.map((b) => (
+                  <option key={b.id} value={b.id}>{b.name}</option>
+                ))}
               </select>
               <ChevronDown className="pointer-events-none absolute right-0 top-1/2 -translate-y-1/2 h-5 w-5 text-foreground/50" />
             </div>
           )}
-        </section>
+        </div>
 
-        {pageError && <ErrorBlock message={pageError} />}
+        <div className="p-6 flex flex-col gap-3">
+          <span
+            className="text-[10px] font-black uppercase tracking-[0.3em] text-foreground/30"
+            style={{ fontFamily: "'Syne', sans-serif" }}
+          >
+            My Activity
+          </span>
 
-        {selectedBiz && (
-          <section className="flex flex-col gap-4">
-            <div className="flex flex-col sm:flex-row sm:items-end justify-between gap-4 border-b-4 border-foreground pb-4">
-              <div className="flex items-baseline gap-4">
-                <h2 className="text-2xl font-black uppercase tracking-widest leading-none" style={{ fontFamily: "'Syne', sans-serif" }}>Available Slots</h2>
-                <span className="text-xs text-foreground/40 uppercase tracking-widest font-bold">{displayedSlots.length} items</span>
-              </div>
-               <div className="flex bg-foreground p-1 w-full sm:w-auto">
-                <button onClick={() => setActiveTab("active")} className={`flex-1 sm:w-32 py-2 text-xs font-black uppercase tracking-widest transition-colors ${activeTab === "active" ? "bg-background text-foreground" : "text-background hover:bg-background/20"}`}>Active</button>
-                <button onClick={() => setActiveTab("history")} className={`flex-1 sm:w-32 py-2 text-xs font-black uppercase tracking-widest transition-colors ${activeTab === "history" ? "bg-background text-foreground" : "text-background hover:bg-background/20"}`}>History</button>
-              </div>
+          <div className="grid grid-cols-2 border-2 border-foreground divide-x-2 divide-y-2 divide-foreground">
+            <StatCell label="Bookings"  value={bookings.length}        accent="text-green-500" />
+            <StatCell label="Waitlists" value={waitlistEntries.length} accent="text-yellow-400" />
+            <StatCell label="Available" value={slots.filter((s) => s.booked_count < s.capacity).length} />
+            <StatCell label="Full"      value={slots.filter((s) => s.status === "booked").length} accent="text-foreground/40" />
+          </div>
+        </div>
+
+        <div className="mt-auto px-6 pb-6 pt-6">
+          <div className="border-2 border-foreground/20 px-4 py-3 flex items-center gap-3">
+            <span className="relative flex h-2.5 w-2.5 shrink-0">
+              <span className="animate-ping absolute inline-flex h-full w-full bg-green-500 opacity-75" />
+              <span className="relative inline-flex h-2.5 w-2.5 bg-green-500" />
+            </span>
+            <span className="text-[10px] font-black uppercase tracking-widest text-foreground/40">
+              Realtime Active
+            </span>
+          </div>
+        </div>
+      </aside>
+
+      {/* ── RIGHT MAIN CONTENT ── */}
+      <main className="flex-1 min-w-0 flex flex-col">
+        <div className="border-b-2 border-foreground px-6 lg:px-10 py-5 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+           <div className="flex items-baseline gap-4">
+              <h2
+                className="text-xl font-black uppercase tracking-widest leading-none"
+                style={{ fontFamily: "'Syne', sans-serif" }}
+              >
+                {selectedBizName ? `${selectedBizName} — Slots` : "Available Slots"}
+              </h2>
+              <span className="text-xs text-foreground/40 uppercase tracking-widest font-bold">
+                {displayedSlots.length} items
+              </span>
             </div>
+            
+            <div className="flex bg-foreground p-1 w-full sm:w-auto">
+              <button
+                onClick={() => setActiveTab("active")}
+                className={`flex-1 sm:w-32 py-2 text-xs font-black uppercase tracking-widest transition-colors ${
+                  activeTab === "active"
+                    ? "bg-background text-foreground"
+                    : "text-background hover:bg-background/20"
+                }`}
+              >
+                Active
+              </button>
+              <button
+                onClick={() => setActiveTab("history")}
+                className={`flex-1 sm:w-32 py-2 text-xs font-black uppercase tracking-widest transition-colors ${
+                  activeTab === "history"
+                    ? "bg-background text-foreground"
+                    : "text-background hover:bg-background/20"
+                }`}
+              >
+                History
+              </button>
+            </div>
+        </div>
 
-            {loadingSlots ? (
-              <div className="flex flex-col gap-3"><SlotSkeleton /><SlotSkeleton /><SlotSkeleton /></div>
-            ) : displayedSlots.length === 0 ? (
-              <div className="border-2 border-dashed border-foreground/30 px-6 py-12 text-center"><p className="text-sm font-bold uppercase tracking-widest text-foreground/30">No slots found</p></div>
-            ) : (
-              <div className="flex flex-col gap-3">
-                {displayedSlots.map((slot) => {
-                  const action = resolveAction(slot, bookedSlotIds, waitlistedSlotIds);
-                  const entry = waitlistEntries.find((w) => w.slot_id === slot.id);
-                  return (
-                    <ClientSlotCard key={slot.id} slot={slot} action={action} loading={actionLoading === slot.id} isPast={activeTab === "history"} waitlistPosition={entry?.position} onBook={() => requirePhone(() => handleBook(slot.id, slot.title))} onJoinWaitlist={() => requirePhone(() => handleJoinWaitlist(slot.id, slot.title))} onCancelBooking={() => setConfirmState({ slotId: slot.id, title: slot.title, kind: "cancel_booking" })} onLeaveWaitlist={() => setConfirmState({ slotId: slot.id, title: slot.title, kind: "leave_waitlist" })} />
-                  );
-                })}
-              </div>
-            )}
-          </section>
-        )}
+        <div className="flex-1 px-6 lg:px-10 py-8 flex flex-col gap-6">
+          {pageError && <ErrorBlock message={pageError} />}
+
+          {!selectedBiz ? (
+            <div className="border-2 border-dashed border-foreground/20 px-6 py-16 text-center">
+              <p className="text-sm font-black uppercase tracking-widest text-foreground/25">
+                Select a business to view slots
+              </p>
+            </div>
+          ) : loadingSlots ? (
+            <div className="flex flex-col gap-3">
+              <SlotSkeleton />
+              <SlotSkeleton />
+              <SlotSkeleton />
+            </div>
+          ) : displayedSlots.length === 0 ? (
+            <div className="border-2 border-dashed border-foreground/20 px-6 py-16 text-center">
+              <p className="text-sm font-black uppercase tracking-widest text-foreground/25">
+                No slots found in this category
+              </p>
+            </div>
+          ) : (
+            <div className="flex flex-col gap-3">
+              {displayedSlots.map((slot) => {
+                const action  = resolveAction(slot, bookedSlotIds, waitlistedSlotIds);
+                const loading = actionLoading === slot.id;
+                const entry   = waitlistEntries.find((w) => w.slot_id === slot.id);
+                return (
+                  <ClientSlotCard
+                    key={slot.id}
+                    slot={slot}
+                    action={action}
+                    loading={loading}
+                    isPast={activeTab === "history"}
+                    waitlistPosition={entry?.position}
+                    onBook={() => requirePhone(() => handleBook(slot.id, slot.title))}
+                    onJoinWaitlist={() => requirePhone(() => handleJoinWaitlist(slot.id, slot.title))}
+                    onCancelBooking={() =>
+                      setConfirmState({ slotId: slot.id, title: slot.title, kind: "cancel_booking" })
+                    }
+                    onLeaveWaitlist={() =>
+                      setConfirmState({ slotId: slot.id, title: slot.title, kind: "leave_waitlist" })
+                    }
+                  />
+                );
+              })}
+            </div>
+          )}
+        </div>
       </main>
     </div>
   );
